@@ -3,8 +3,12 @@
 #include <cassert>
 
 #include <SDL/SDL.h>
+#undef main
 
+unsigned resolution_factor = 3; // 1=320x200, 2=640x40, 3=1280x800, ...
+#ifdef USE_EMSCRIPTEN
 #include <emscripten.h>
+#endif
 
 #include "GLOBDATA.BIN.inc"
 #include "MAP.BIN.inc"
@@ -235,10 +239,36 @@ void draw_frame(void *user_data) {
 	uint8_t *screenbuffer = (uint8_t*)screen->pixels;
 	for (int i = 0; i != 64000; ++i) {
 		int c = framebuffer[i];
-		screenbuffer[4 * i + 0] = PAL_BIN[3 * c + 0];
-		screenbuffer[4 * i + 1] = PAL_BIN[3 * c + 1];
-		screenbuffer[4 * i + 2] = PAL_BIN[3 * c + 2];
-		screenbuffer[4 * i + 3] = 255;
+#if 1 // for my windows
+		unsigned char red = PAL_BIN[3 * c + 2];
+		unsigned char green = PAL_BIN[3 * c + 1];
+		unsigned char blue = PAL_BIN[3 * c + 0];
+#else
+		unsigned char red = PAL_BIN[3 * c + 0];
+		unsigned char green = PAL_BIN[3 * c + 1];
+		unsigned char blue = PAL_BIN[3 * c + 2];
+#endif
+#if 1
+		unsigned x = i / 320;
+		unsigned y = i % 320;
+		for (unsigned w = 0; w < resolution_factor; ++w)
+		{
+			for (unsigned h = 0; h < resolution_factor; ++h)
+			{
+				const unsigned pixel_offset = ((x * resolution_factor + w) * (320 * resolution_factor) + (y * resolution_factor + h)) * 4;
+				screenbuffer[pixel_offset + 0] = red;
+				screenbuffer[pixel_offset + 1] = green;
+				screenbuffer[pixel_offset + 2] = blue;
+				screenbuffer[pixel_offset + 3] = 255;
+			}
+		}
+#else
+		const unsigned pixel_offset = 4 * i;
+		screenbuffer[pixel_offset + 0] = red;
+		screenbuffer[pixel_offset + 1] = green;
+		screenbuffer[pixel_offset + 2] = blue;
+		screenbuffer[pixel_offset + 3] = 255;
+#endif
 	}
 
 	if (SDL_MUSTLOCK(screen)) SDL_UnlockSurface(screen);
@@ -252,14 +282,30 @@ extern "C"
 int main() {
 	SDL_Init(SDL_INIT_VIDEO);
 
-	screen = SDL_SetVideoMode(320, 200, 32, SDL_SWSURFACE);
+	screen = SDL_SetVideoMode(320*resolution_factor, 200*resolution_factor, 32, SDL_SWSURFACE);
 
 #ifdef TEST_SDL_LOCK_OPTS
 	EM_ASM("SDL.defaults.copyOnLock = false; SDL.defaults.discardOnLock = true; SDL.defaults.opaqueFrontBuffer = false;");
 #endif
 
+#ifdef USE_EMSCRIPTEN
 	emscripten_set_main_loop_arg(draw_frame, NULL, -1, 1);
+#else
+	bool run = true;
+	while (run) {
+		SDL_Event event;
+		while (SDL_PollEvent(&event)) {  // poll until all events are handled!
+			if (event.type == SDL_QUIT)
+			{
+				run = false;
+				break;
+			}
+		}
 
+		draw_frame(nullptr);
+		SDL_Delay(10);
+	}
+#endif
 	SDL_Quit();
 
 	return 0;
