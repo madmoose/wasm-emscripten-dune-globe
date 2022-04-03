@@ -33,6 +33,8 @@ int16_t uint16_as_int16(uint16_t u) {
 	return u < INT16_MAX ? u : u - UINT16_MAX - 1;
 }
 
+const uint16_t MAX_TILT = 98;
+
 /*
  *  globe_rotation is value from 0x0000 - 0xffff.
  *  Think of it as the fractional part of a 16.16 fixed point number.
@@ -54,7 +56,7 @@ void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
 	// Convert back to value from 0-1 in 16.16 fixed point
 	bx = dxax / 398;
 
-	for (int i = 1; i != 99; ++i) {
+	for (int i = 1; i != MAX_TILT+1; ++i) {
 		uint32_t dxax = 2 * uint32_t(bx) * uint32_t(globe_rotation_lookup_table[4 * i + 1]);
 		globe_rotation_lookup_table[4 * i + 2] = (dxax >> 16) & 0xffff;
 		globe_rotation_lookup_table[4 * i + 3] = (dxax >>  0) & 0xffff;
@@ -64,27 +66,27 @@ void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
 void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
 	int i = 0;
 
-	if (globe_tilt < -98) {
-		globe_tilt = -98;
+	if (globe_tilt < -MAX_TILT) {
+		globe_tilt = -MAX_TILT;
 	}
-	if (globe_tilt > 98) {
-		globe_tilt = 98;
+	if (globe_tilt > MAX_TILT) {
+		globe_tilt = MAX_TILT;
 	}
 
-	// For stage 1, count down from globe_tilt-99 to -98
+	// For stage 1, count down from globe_tilt-(MAX_TILT+1) to -MAX_TILT
 	if (globe_tilt > 0) {
-		int v = globe_tilt - 98;
+		int v = globe_tilt - MAX_TILT;
 		do {
 			globe_tilt_lookup_table[i++] = uint8_t(--v);
-		} while (i != 196 && v > -98);
+		} while (i != 196 && v > -MAX_TILT);
 	}
 
 	if (i == 196) {
 		return;
 	}
 
-	// For stage 2, count down from 98 to 0
-	int v = globe_tilt + 98 - i;
+	// For stage 2, count down from MAX_TILT to 0
+	int v = globe_tilt + MAX_TILT - i;
 	do {
 		globe_tilt_lookup_table[i++] = uint8_t(v--);
 	} while (i != 196 && v >= 0);
@@ -93,18 +95,18 @@ void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
 		return;
 	}
 
-	// For stage 3, count up from 1 to 98, binary-or'ed with 0xff00
+	// For stage 3, count up from 1 to MAX_TILT, binary-or'ed with 0xff00
 	v = 1;
 	do {
 		globe_tilt_lookup_table[i++] = v++ | 0xff00;
-	} while (i != 196 && v <= 98);
+	} while (i != 196 && v <= MAX_TILT);
 
 	if (i == 196) {
 		return;
 	}
 
-	// For stage 4, count up from -98 to 0, binary-or'ed with 0xff00
-	v = -98;
+	// For stage 4, count up from -MAX_TILT to 0, binary-or'ed with 0xff00
+	v = -MAX_TILT;
 	do {
 		globe_tilt_lookup_table[i++] = v++ | 0xff00;
 	} while (i != 196 && v <= 0);
@@ -117,7 +119,7 @@ void draw_globe(uint8_t *framebuffer) {
 	uint16_t cs_1CA8 = 1;    // offset into globdata
 	uint16_t cs_1CA6 = 1;    // offset into globdata
 	uint16_t cs_1CAA = 3290; // offset into globdata
-	uint16_t cs_1CAC = 98;   // offset into globe_tilt_lookup_table
+	uint16_t cs_1CAC = MAX_TILT;   // offset into globe_tilt_lookup_table
 
 	uint16_t cs_1CB4 = -320; // screen width
 
@@ -274,7 +276,7 @@ void draw_frame(void *user_data) {
 
 	float f = sinf(frame / 200.0);
 
-	int16_t tilt = -98 * f;
+	int16_t tilt = -MAX_TILT * f;
 	int16_t rotation = 150 * frame;
 
 	precalculate_globe_rotation_lookup_table(rotation);
