@@ -1,6 +1,7 @@
-#include <cstdio>
-#include <cstdint>
 #include <cassert>
+#include <cstdint>
+#include <cstdio>
+#include <cmath>
 
 #include <SDL/SDL.h>
 #undef main
