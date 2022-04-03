@@ -239,7 +239,8 @@ void draw_frame(void *user_data) {
 	uint8_t *screenbuffer = (uint8_t*)screen->pixels;
 	for (int i = 0; i != 64000; ++i) {
 		int c = framebuffer[i];
-#if 1 // for my windows
+
+#ifdef _WIN32
 		unsigned char red = PAL_BIN[3 * c + 2];
 		unsigned char green = PAL_BIN[3 * c + 1];
 		unsigned char blue = PAL_BIN[3 * c + 0];
