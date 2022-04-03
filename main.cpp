@@ -20,6 +20,9 @@ SDL_Surface *screen = NULL;
 uint8_t      framebuffer[320*200];
 int          frame = 0;
 
+uint16_t     globe_rotation_lookup_table[396];
+uint16_t     globe_tilt_lookup_table[196];
+
 inline
 int8_t uint8_as_int8(uint8_t u) {
 	return u < INT8_MAX ? u : u - UINT8_MAX - 1;
@@ -30,57 +33,91 @@ int16_t uint16_as_int16(uint16_t u) {
 	return u < INT16_MAX ? u : u - UINT16_MAX - 1;
 }
 
+/*
+ *  globe_rotation is value from 0x0000 - 0xffff.
+ *  Think of it as the fractional part of a 16.16 fixed point number.
+ */
+void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
+	uint16_t ax, cx, dx, bx;
+
+	uint32_t dxax = 398 * globe_rotation;
+
+	// Floor the 16.16 fp value
+	dxax &= ~0xffff;
+
+	globe_rotation_lookup_table[2] = (dxax >> 16) & 0xffff;
+	globe_rotation_lookup_table[3] = (dxax >>  0) & 0xffff;
+
+	// Add 0.5 in 16.16 fixed point
+	dxax += 0x8000;
+
+	// Convert back to value from 0-1 in 16.16 fixed point
+	bx = dxax / 398;
+
+	for (int i = 1; i != 99; ++i) {
+		uint32_t dxax = 2 * uint32_t(bx) * uint32_t(globe_rotation_lookup_table[4 * i + 1]);
+		globe_rotation_lookup_table[4 * i + 2] = (dxax >> 16) & 0xffff;
+		globe_rotation_lookup_table[4 * i + 3] = (dxax >>  0) & 0xffff;
+	}
+}
+
+void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
+	int i = 0;
+
+	if (globe_tilt < -98) {
+		globe_tilt = -98;
+	}
+	if (globe_tilt > 98) {
+		globe_tilt = 98;
+	}
+
+	// For stage 1, count down from globe_tilt-99 to -98
+	if (globe_tilt > 0) {
+		int v = globe_tilt - 98;
+		do {
+			globe_tilt_lookup_table[i++] = uint8_t(--v);
+		} while (i != 196 && v > -98);
+	}
+
+	if (i == 196) {
+		return;
+	}
+
+	// For stage 2, count down from 98 to 0
+	int v = globe_tilt + 98 - i;
+	do {
+		globe_tilt_lookup_table[i++] = uint8_t(v--);
+	} while (i != 196 && v >= 0);
+
+	if (i == 196) {
+		return;
+	}
+
+	// For stage 3, count up from 1 to 98, binary-or'ed with 0xff00
+	v = 1;
+	do {
+		globe_tilt_lookup_table[i++] = v++ | 0xff00;
+	} while (i != 196 && v <= 98);
+
+	if (i == 196) {
+		return;
+	}
+
+	// For stage 4, count up from -98 to 0, binary-or'ed with 0xff00
+	v = -98;
+	do {
+		globe_tilt_lookup_table[i++] = v++ | 0xff00;
+	} while (i != 196 && v <= 0);
+}
+
 void draw_globe(uint8_t *framebuffer) {
 	const uint8_t  *globdata = GLOBDATA_BIN;
 	const uint8_t  *map      = MAP_BIN;
-	uint16_t tablat[792/2];
-
-	for (int i = 0; i != 792; i += 2) {
-		uint16_t u = (TABLAT_BIN[i+0] << 0) + (TABLAT_BIN[i+1] << 8);
-		tablat[i/2] = u;
-	}
-
-	int16_t  word_21910 = -0 - (frame % 96);
-	int16_t  unknown_table_5[196];
-	int16_t  idx = 0;
-	{
-		int16_t bx = 98;
-		int16_t ax = word_21910;
-		ax += bx;
-		if (ax > bx) {
-			assert(0 && "TODO");
-		}
-
-		do {
-			unknown_table_5[idx++] = ax--;
-		} while (ax >= 0 && idx != 196);
-		if (idx == 196) {
-			goto end;
-		}
-
-		ax = 1;
-		do {
-			unknown_table_5[idx++] = 0xff00 | ax;
-			ax++;
-		} while (ax <= bx && idx != 196);
-		if (idx == 196) {
-			goto end;
-		}
-
-		ax = 0x100 - bx;
-
-		do {
-			unknown_table_5[idx++] = 0xff00 | ax;
-			ax++;
-		} while (idx != 196);
-
-end:;
-	}
 
 	uint16_t cs_1CA8 = 1;    // offset into globdata
 	uint16_t cs_1CA6 = 1;    // offset into globdata
 	uint16_t cs_1CAA = 3290; // offset into globdata
-	uint16_t cs_1CAC = 98;   // offset into unknown_table_5
+	uint16_t cs_1CAC = 98;   // offset into globe_tilt_lookup_table
 
 	uint16_t cs_1CB4 = -320; // screen width
 
@@ -123,7 +160,7 @@ end:;
 			}
 
 			uint16_t ax_ = ax;
-			ax = unknown_table_5[cs_1CAC + uint8_as_int8(ax & 0xff)];
+			ax = globe_tilt_lookup_table[cs_1CAC + uint8_as_int8(ax & 0xff)];
 
 			if (uint16_as_int16(ax) >= 0) {
 				ax = uint8_as_int8(ax & 0xff);
@@ -134,9 +171,9 @@ end:;
 					ax = globdata[bp + si + 0x64];
 
 					bp = bx;
-					bx = tablat[2 * bp + 0];
-					cx = tablat[2 * bp + 1];
-					dx = tablat[2 * bp + 2];
+					bx = globe_rotation_lookup_table[2 * bp + 0];
+					cx = globe_rotation_lookup_table[2 * bp + 1];
+					dx = globe_rotation_lookup_table[2 * bp + 2];
 
 					ax = cx - ax;
 				} else {
@@ -145,9 +182,9 @@ end:;
 					ax = globdata[bp + si + 0x64];
 
 					bp = bx;
-					bx = tablat[2 * bp + 0];
-					cx = tablat[2 * bp + 1];
-					dx = tablat[2 * bp + 2];
+					bx = globe_rotation_lookup_table[2 * bp + 0];
+					cx = globe_rotation_lookup_table[2 * bp + 1];
+					dx = globe_rotation_lookup_table[2 * bp + 2];
 				}
 			} else {
 				ax = uint8_as_int8(ax & 0xff);
@@ -158,9 +195,9 @@ end:;
 					ax = globdata[bp + si + 0x64];
 
 					bp = bx;
-					bx = tablat[2 * bp + 0];
-					cx = tablat[2 * bp + 1];
-					dx = tablat[2 * bp + 2];
+					bx = globe_rotation_lookup_table[2 * bp + 0];
+					cx = globe_rotation_lookup_table[2 * bp + 1];
+					dx = globe_rotation_lookup_table[2 * bp + 2];
 
 					ax = cx - ax;
 					bx = -bx;
@@ -170,9 +207,9 @@ end:;
 					ax = globdata[bp + si + 0x64];
 
 					bp = bx;
-					bx = tablat[2 * bp + 0];
-					cx = tablat[2 * bp + 1];
-					dx = tablat[2 * bp + 2];
+					bx = globe_rotation_lookup_table[2 * bp + 0];
+					cx = globe_rotation_lookup_table[2 * bp + 1];
+					dx = globe_rotation_lookup_table[2 * bp + 2];
 
 					bx = -bx;
 				}
@@ -235,6 +272,14 @@ end:;
 void draw_frame(void *user_data) {
 	if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
 
+	float f = sinf(frame / 200.0);
+
+	int16_t tilt = -98 * f;
+	int16_t rotation = 150 * frame;
+
+	precalculate_globe_rotation_lookup_table(rotation);
+	precalculate_globe_tilt_lookup_table(tilt);
+
 	draw_globe(framebuffer);
 
 	uint8_t *screenbuffer = (uint8_t*)screen->pixels;
@@ -250,6 +295,7 @@ void draw_frame(void *user_data) {
 		unsigned char green = PAL_BIN[3 * c + 1];
 		unsigned char blue = PAL_BIN[3 * c + 2];
 #endif
+
 #if 1
 		unsigned x = i / 320;
 		unsigned y = i % 320;
@@ -283,6 +329,11 @@ void draw_frame(void *user_data) {
 extern "C"
 int main() {
 	SDL_Init(SDL_INIT_VIDEO);
+
+	for (int i = 0; i != 396; i++) {
+		uint16_t u = (TABLAT_BIN[2*i + 0] << 0) + (TABLAT_BIN[2*i+ 1 ] << 8);
+		globe_rotation_lookup_table[i] = u;
+	}
 
 	screen = SDL_SetVideoMode(320*resolution_factor, 200*resolution_factor, 32, SDL_SWSURFACE);
 
