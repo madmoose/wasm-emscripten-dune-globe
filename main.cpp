@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
+#include <array>
 
 #include <SDL/SDL.h>
 #undef main
@@ -16,12 +17,15 @@ unsigned resolution_factor = 3; // 1=320x200, 2=640x40, 3=1280x800, ...
 #include "PAL.BIN.inc"
 #include "TABLAT.BIN.inc"
 
+const int ORIGINAL_WIDTH = 320;
+const int ORIGINAL_HEIGHT = 200;
+
 SDL_Surface *screen = NULL;
-uint8_t      framebuffer[320*200];
+std::array<uint8_t, ORIGINAL_WIDTH*ORIGINAL_HEIGHT> framebuffer;
 int          frame = 0;
 
-uint16_t     globe_rotation_lookup_table[396];
-uint16_t     globe_tilt_lookup_table[196];
+std::array<uint16_t, 396> globe_rotation_lookup_table;
+std::array<uint16_t, 196> globe_tilt_lookup_table;
 
 inline
 int8_t uint8_as_int8(uint8_t u) {
@@ -78,10 +82,10 @@ void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
 		int v = globe_tilt - MAX_TILT;
 		do {
 			globe_tilt_lookup_table[i++] = uint8_t(--v);
-		} while (i != 196 && v > -MAX_TILT);
+		} while (i != globe_tilt_lookup_table.size() && v > -MAX_TILT);
 	}
 
-	if (i == 196) {
+	if (i == globe_tilt_lookup_table.size()) {
 		return;
 	}
 
@@ -89,9 +93,9 @@ void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
 	int v = globe_tilt + MAX_TILT - i;
 	do {
 		globe_tilt_lookup_table[i++] = uint8_t(v--);
-	} while (i != 196 && v >= 0);
+	} while (i != globe_tilt_lookup_table.size() && v >= 0);
 
-	if (i == 196) {
+	if (i == globe_tilt_lookup_table.size()) {
 		return;
 	}
 
@@ -99,9 +103,9 @@ void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
 	v = 1;
 	do {
 		globe_tilt_lookup_table[i++] = v++ | 0xff00;
-	} while (i != 196 && v <= MAX_TILT);
+	} while (i != globe_tilt_lookup_table.size() && v <= MAX_TILT);
 
-	if (i == 196) {
+	if (i == globe_tilt_lookup_table.size()) {
 		return;
 	}
 
@@ -109,7 +113,7 @@ void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
 	v = -MAX_TILT;
 	do {
 		globe_tilt_lookup_table[i++] = v++ | 0xff00;
-	} while (i != 196 && v <= 0);
+	} while (i != globe_tilt_lookup_table.size() && v <= 0);
 }
 
 void draw_globe(uint8_t *framebuffer) {
@@ -121,7 +125,7 @@ void draw_globe(uint8_t *framebuffer) {
 	uint16_t cs_1CAA = 3290; // offset into globdata
 	uint16_t cs_1CAC = MAX_TILT;   // offset into globe_tilt_lookup_table
 
-	uint16_t cs_1CB4 = -320; // screen width
+	uint16_t cs_1CB4 = -ORIGINAL_WIDTH; // screen width
 
 	uint16_t cs_1CB0 = 0x6360;
 	uint16_t cs_1CB2 = 0x6360;
@@ -282,10 +286,10 @@ void draw_frame(void *user_data) {
 	precalculate_globe_rotation_lookup_table(rotation);
 	precalculate_globe_tilt_lookup_table(tilt);
 
-	draw_globe(framebuffer);
+	draw_globe(framebuffer.data());
 
 	uint8_t *screenbuffer = (uint8_t*)screen->pixels;
-	for (int i = 0; i != 64000; ++i) {
+	for (int i = 0; i != framebuffer.size(); ++i) {
 		int c = framebuffer[i];
 
 #ifdef _WIN32
@@ -299,13 +303,13 @@ void draw_frame(void *user_data) {
 #endif
 
 #if 1
-		unsigned x = i / 320;
-		unsigned y = i % 320;
+		unsigned x = i / ORIGINAL_WIDTH;
+		unsigned y = i % ORIGINAL_WIDTH;
 		for (unsigned w = 0; w < resolution_factor; ++w)
 		{
 			for (unsigned h = 0; h < resolution_factor; ++h)
 			{
-				const unsigned pixel_offset = ((x * resolution_factor + w) * (320 * resolution_factor) + (y * resolution_factor + h)) * 4;
+				const unsigned pixel_offset = ((x * resolution_factor + w) * (ORIGINAL_WIDTH * resolution_factor) + (y * resolution_factor + h)) * 4;
 				screenbuffer[pixel_offset + 0] = red;
 				screenbuffer[pixel_offset + 1] = green;
 				screenbuffer[pixel_offset + 2] = blue;
@@ -332,12 +336,12 @@ extern "C"
 int main() {
 	SDL_Init(SDL_INIT_VIDEO);
 
-	for (int i = 0; i != 396; i++) {
+	for (int i = 0; i != globe_rotation_lookup_table.size(); i++) {
 		uint16_t u = (TABLAT_BIN[2*i + 0] << 0) + (TABLAT_BIN[2*i+ 1 ] << 8);
 		globe_rotation_lookup_table[i] = u;
 	}
 
-	screen = SDL_SetVideoMode(320*resolution_factor, 200*resolution_factor, 32, SDL_SWSURFACE);
+	screen = SDL_SetVideoMode(ORIGINAL_WIDTH*resolution_factor, ORIGINAL_HEIGHT*resolution_factor, 32, SDL_SWSURFACE);
 
 #ifdef TEST_SDL_LOCK_OPTS
 	EM_ASM("SDL.defaults.copyOnLock = false; SDL.defaults.discardOnLock = true; SDL.defaults.opaqueFrontBuffer = false;");
