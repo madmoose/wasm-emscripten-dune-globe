@@ -6,7 +6,7 @@
 #undef main
 
 unsigned resolution_factor = 3; // 1=320x200, 2=640x40, 3=1280x800, ...
-#ifdef USE_EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
 
@@ -288,7 +288,7 @@ int main() {
 	EM_ASM("SDL.defaults.copyOnLock = false; SDL.defaults.discardOnLock = true; SDL.defaults.opaqueFrontBuffer = false;");
 #endif
 
-#ifdef USE_EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
 	emscripten_set_main_loop_arg(draw_frame, NULL, -1, 1);
 #else
 	bool run = true;
