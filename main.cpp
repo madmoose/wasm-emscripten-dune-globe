@@ -116,6 +116,11 @@ void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
 	} while (i != globe_tilt_lookup_table.size() && v <= 0);
 }
 
+uint16_t frame_buffer_offset(int x_, int y_)
+{
+  return y_ * ORIGINAL_WIDTH + x_;
+}
+
 void draw_globe(uint8_t *framebuffer) {
 	const uint8_t  *globdata = GLOBDATA_BIN;
 	const uint8_t  *map      = MAP_BIN;
@@ -127,9 +132,10 @@ void draw_globe(uint8_t *framebuffer) {
 
 	uint16_t cs_1CB4 = -ORIGINAL_WIDTH; // screen width
 
-	uint16_t cs_1CB0 = 0x6360;
-	uint16_t cs_1CB2 = 0x6360;
-	uint16_t cs_1CAE = 0x6360 - 1;
+	const uint16_t globe_center_xy_offset1 = frame_buffer_offset(160, 79);
+	uint16_t cs_1CB0 = globe_center_xy_offset1;
+	uint16_t cs_1CB2 = globe_center_xy_offset1;
+	uint16_t cs_1CAE = globe_center_xy_offset1 - 1;
 
 	bool drawing_southern_hemisphere;
 
@@ -150,10 +156,7 @@ void draw_globe(uint8_t *framebuffer) {
 				return;
 			}
 			
-			const int globe_center_x = 160;
-			const int globe_center_y = 80;
-			const int globe_center_xy_offset = globe_center_y * ORIGINAL_WIDTH + globe_center_x;
-			
+			const uint16_t globe_center_xy_offset = frame_buffer_offset(160, 80);
 			cs_1CB0 = globe_center_xy_offset;
 			cs_1CB2 = globe_center_xy_offset;
 			cs_1CAE = globe_center_xy_offset - 1;
