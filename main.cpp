@@ -121,6 +121,14 @@ uint16_t frame_buffer_offset(int x_, int y_)
   return y_ * ORIGINAL_WIDTH + x_;
 }
 
+void draw_pixel(uint8_t* screen_, uint32_t offset_, uint8_t red_, uint8_t green_, uint8_t blue_, uint8_t alpha_)
+{
+	screen_[offset_ + 0] = red_;
+	screen_[offset_ + 1] = green_;
+	screen_[offset_ + 2] = blue_;
+	screen_[offset_ + 3] = 255;
+}
+
 void draw_globe(uint8_t *framebuffer) {
 	const uint8_t  *globdata = GLOBDATA_BIN;
 	const uint8_t  *map      = MAP_BIN;
@@ -304,19 +312,15 @@ void draw_frame(void *user_data) {
 		{
 			for (unsigned h = 0; h < resolution_factor; ++h)
 			{
-				const unsigned pixel_offset = ((x * resolution_factor + w) * (ORIGINAL_WIDTH * resolution_factor) + (y * resolution_factor + h)) * 4;
-				screenbuffer[pixel_offset + 0] = red;
-				screenbuffer[pixel_offset + 1] = green;
-				screenbuffer[pixel_offset + 2] = blue;
-				screenbuffer[pixel_offset + 3] = 255;
+				const unsigned pixel_offset = ((x * resolution_factor + w) 
+					                           * (ORIGINAL_WIDTH * resolution_factor) 
+					                           + (y * resolution_factor + h)) * 4;
+				draw_pixel(screenbuffer,pixel_offset,red,green,blue,255); 
 			}
 		}
 #else
 		const unsigned pixel_offset = 4 * i;
-		screenbuffer[pixel_offset + 0] = red;
-		screenbuffer[pixel_offset + 1] = green;
-		screenbuffer[pixel_offset + 2] = blue;
-		screenbuffer[pixel_offset + 3] = 255;
+        draw_pixel(screenbuffer,pixel_offset,red,green,blue,255); 
 #endif
 	}
 
