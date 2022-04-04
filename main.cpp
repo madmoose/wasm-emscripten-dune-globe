@@ -173,56 +173,44 @@ void draw_globe(uint8_t *framebuffer) {
 			uint16_t ax_ = ax;
 			ax = globe_tilt_lookup_table[cs_1CAC + uint8_as_int8(ax & 0xff)];
 
+			auto func1 = [&globdata, &ax, &bx,&cx,&dx](uint16_t ax_, uint16_t si_)
+			{
+				uint16_t bp = ax_;
+				bx = globdata[bp + si_];
+				// 1 result
+				ax = globdata[bp + si_ + 100];
+
+				bp = bx * 2;
+				// 3 results from globe_rotation_lookup_table
+				bx = globe_rotation_lookup_table[bp + 0];
+				cx = globe_rotation_lookup_table[bp + 1];
+				dx = globe_rotation_lookup_table[bp + 2];
+			};
+
 			// in: ax, si
 			// out: ax,bx,cx,dx
 			if (uint16_as_int16(ax) >= 0) {
 				ax = uint8_as_int8(ax & 0xff);
 				if (uint16_as_int16(ax) < 0) {
 					ax = -ax;
-					uint16_t bp = ax;
-					bx = globdata[bp + si];
-					ax = globdata[bp + si + 100];
 
-					bp = bx * 2;
-					bx = globe_rotation_lookup_table[bp + 0];
-					cx = globe_rotation_lookup_table[bp + 1];
-					dx = globe_rotation_lookup_table[bp + 2];
+					func1(ax, si);
 
 					ax = cx - ax;
 				} else {
-					uint16_t bp = ax;
-					bx = globdata[bp + si];
-					ax = globdata[bp + si + 100];
-
-					bp = bx * 2;
-					bx = globe_rotation_lookup_table[bp + 0];
-					cx = globe_rotation_lookup_table[bp + 1];
-					dx = globe_rotation_lookup_table[bp + 2];
+					func1(ax, si);
 				}
 			} else {
 				ax = uint8_as_int8(ax & 0xff);
 				if (uint16_as_int16(ax) < 0) {
 					ax = -ax;
-					uint16_t bp = ax;
-					bx = globdata[bp + si];
-					ax = globdata[bp + si + 100];
 
-					bp = bx * 2;
-					bx = globe_rotation_lookup_table[bp + 0];
-					cx = globe_rotation_lookup_table[bp + 1];
-					dx = globe_rotation_lookup_table[bp + 2];
+					func1(ax, si);
 
 					ax = cx - ax;
 					bx = -bx;
 				} else {
-					uint16_t bp = ax;
-					bx = globdata[bp + si];
-					ax = globdata[bp + si + 100];
-
-					bp = bx * 2;
-					bx = globe_rotation_lookup_table[bp + 0];
-					cx = globe_rotation_lookup_table[bp + 1];
-					dx = globe_rotation_lookup_table[bp + 2];
+					func1(ax, si);
 
 					bx = -bx;
 				}
