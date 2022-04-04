@@ -44,9 +44,9 @@ const uint16_t MAX_TILT = 98;
  *  Think of it as the fractional part of a 16.16 fixed point number.
  */
 void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
-	uint16_t ax, cx, dx, bx;
+	constexpr uint32_t MAGIC_VALUE = 398;
 
-	uint32_t dxax = 398 * globe_rotation;
+	uint32_t dxax = MAGIC_VALUE * globe_rotation;
 
 	// Floor the 16.16 fp value
 	dxax &= ~0xffff;
@@ -58,7 +58,7 @@ void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
 	dxax += 0x8000;
 
 	// Convert back to value from 0-1 in 16.16 fixed point
-	bx = dxax / 398;
+	uint16_t bx = dxax / MAGIC_VALUE;
 
 	for (int i = 1; i != MAX_TILT+1; ++i) {
 		uint32_t dxax = 2 * uint32_t(bx) * uint32_t(globe_rotation_lookup_table[4 * i + 1]);
@@ -147,15 +147,12 @@ void draw_globe(uint8_t *framebuffer) {
 	uint16_t cs_1CB2 = globe_center_xy_offset1;
 	uint16_t cs_1CAE = globe_center_xy_offset1 - 1;
 
-	bool drawing_southern_hemisphere;
-
-	drawing_southern_hemisphere = false;
+	bool drawing_southern_hemisphere = false;
 
 	do {
 		uint16_t di = cs_1CA6; // offset into globdata
 
 		uint16_t ax = globdata[di++];
-		uint16_t bx, cx, dx;
 
 		if (uint8_as_int8(ax & 0xff) < 0) {
 			drawing_southern_hemisphere = true;
@@ -186,37 +183,46 @@ void draw_globe(uint8_t *framebuffer) {
 			uint16_t ax_ = ax; // not in use???
 			ax = globe_tilt_lookup_table[cs_1CAC + uint8_as_int8(ax & 0xff)];
 
+			struct result_t
 			{
-				// in: ax, si
-				// out: ax,bx,cx,dx
-				const bool neg_bx = uint16_as_int16(ax) < 0;
-				ax = uint8_as_int8(ax & 0xff);
-				const bool neg_ax = uint16_as_int16(ax) < 0;
+				uint16_t gd{}; // ax
+				uint16_t grlt_0{}; // bx
+				uint16_t grlt_1{}; // cx
+				uint16_t grlt_2{}; // dx
+			};
+
+			auto func1 = [](const uint8_t* globdata_, uint16_t ofs1/*ax*/, uint16_t base_ofs/*si*/)
+			{
+				const bool neg_bx = uint16_as_int16(ofs1) < 0;
+				
+				uint16_t offset1 = uint8_as_int8(ofs1 & 0xff);
+				const bool neg_ax = uint16_as_int16(offset1) < 0;
 				if (neg_ax) {
-					ax = -ax;
+					offset1 = -offset1;
 				}
 
-				uint16_t bp = ax;
-				bx = globdata[bp + si];
-				// 1 result
-				ax = globdata[bp + si + 100];
+				result_t result;
 
-				bp = bx * 2;
+				// 1 result
+				uint16_t gd = globdata_[base_ofs + offset1 + 100];
+				const uint16_t offset2 = globdata_[base_ofs + offset1] * 2;
 				// 3 results from globe_rotation_lookup_table
-				bx = globe_rotation_lookup_table[bp + 0];
-				cx = globe_rotation_lookup_table[bp + 1];
-				dx = globe_rotation_lookup_table[bp + 2];
+				uint16_t grlt_0 = globe_rotation_lookup_table[offset2 + 0]; // bx
+				uint16_t grlt_1 = globe_rotation_lookup_table[offset2 + 1]; // cx
+				uint16_t grlt_2 = globe_rotation_lookup_table[offset2 + 2]; // dx
 
 				if (neg_ax) {
-					ax = cx - ax;
+					gd = grlt_1 - gd;
 				}
 				if (neg_bx)
 				{
-					bx = -bx;
+					grlt_0 = -grlt_0;
 				}
-			}
-			
-			cx *= 2;
+
+				grlt_1 *= 2;
+
+				return result_t{gd, grlt_0, grlt_1, grlt_2 };
+			};
 
 			auto some_offset = [](uint16_t value, uint16_t adjust1, uint16_t adjust2)
 			{
@@ -246,8 +252,20 @@ void draw_globe(uint8_t *framebuffer) {
 
 			constexpr uint16_t MAGIC_OFS1 = 0x62FC;
 			const uint8_t* sub_map = &map[MAGIC_OFS1];
-			framebuffer[cs_1CAE--] = pixel_color(sub_map[uint16_as_int16(some_offset(dx - ax, cx, bx))]);
-			framebuffer[cs_1CB0++] = pixel_color(sub_map[uint16_as_int16(some_offset(dx + ax - cx, cx, bx))]);
+
+			const result_t res = func1(globdata, ax, si);
+
+			const int16_t ofs1 = uint16_as_int16(some_offset(
+				res.grlt_2 - res.gd,
+				res.grlt_1,
+				res.grlt_0));
+			framebuffer[cs_1CAE--] = pixel_color(sub_map[ofs1]);
+
+			const int16_t ofs2 = uint16_as_int16(some_offset(
+				res.grlt_2 + res.gd - res.grlt_1,
+				res.grlt_1,
+				res.grlt_0));
+			framebuffer[cs_1CB0++] = pixel_color(sub_map[ofs2]);
 
 			si += 200; // FRAMEBUFFER_WIDTH?
 			ax = globdata[di++];
@@ -255,10 +273,9 @@ void draw_globe(uint8_t *framebuffer) {
 		} while (uint8_as_int8(ax) >= 0);
 
 		cs_1CA6 = di;
-		ax = cs_1CB4 + cs_1CB2;
-		cs_1CB2 = ax;
-		cs_1CB0 = ax;
-		cs_1CAE = ax - 1;
+		cs_1CB2 = cs_1CB4 + cs_1CB2;
+		cs_1CB0 = cs_1CB2;
+		cs_1CAE = cs_1CB2 - 1;
 	} while (true);
 }
 
