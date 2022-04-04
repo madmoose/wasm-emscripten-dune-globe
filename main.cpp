@@ -218,14 +218,16 @@ void draw_globe(uint8_t *framebuffer) {
 			
 			cx *= 2;
 
-			uint16_t bp = dx - ax;
-			if (uint16_as_int16(bp) < 0) {
-				bp += cx;
-			}
-			bp += bx;
-			dx += ax;
+			auto some_offset = [](uint16_t value, uint16_t adjust1, uint16_t adjust2)
+			{
+				if (uint16_as_int16(value) < 0) {
+					value += adjust1;
+				}
+				value += adjust2;
+				return value;
+			};
 
-			auto func2 = [](uint16_t value)
+			auto pixel_color = [](uint16_t value)
 			{
 				uint8_t al = value & 0x0f;
 				if ((value & 0x30) == 0x10) {
@@ -237,21 +239,10 @@ void draw_globe(uint8_t *framebuffer) {
 				return al;
 			};
 
-			ax = map[0x62FC + uint16_as_int16(bp)];
-			{
-				framebuffer[cs_1CAE--] = func2(ax);
-			}
-
-			bp = dx - cx;
-			if (uint16_as_int16(bp) < 0) {
-				bp += cx;
-			}
-			bp += bx;
-
-			ax = map[0x62FC + uint16_as_int16(bp)];
-			{
-				framebuffer[cs_1CB0++] = func2(ax);
-			}
+			constexpr uint16_t MAGIC_OFS1 = 0x62FC;
+			const uint8_t* sub_map = &map[MAGIC_OFS1];
+			framebuffer[cs_1CAE--] = pixel_color(sub_map[uint16_as_int16(some_offset(dx - ax, cx, bx))]);
+			framebuffer[cs_1CB0++] = pixel_color(sub_map[uint16_as_int16(some_offset(dx + ax - cx, cx, bx))]);
 
 			si += 200; // ORIGINAL_WIDTH?
 			ax = globdata[di++];
