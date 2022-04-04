@@ -149,9 +149,14 @@ void draw_globe(uint8_t *framebuffer) {
 			if (uint16_as_int16(cs_1CB4) < 0) {
 				return;
 			}
-			cs_1CB0 = 0x64A0;
-			cs_1CB2 = 0x64A0;
-			cs_1CAE = 0x64A0 - 1;
+			
+			const int globe_center_x = 160;
+			const int globe_center_y = 80;
+			const int globe_center_xy_offset = globe_center_y * ORIGINAL_WIDTH + globe_center_x;
+			
+			cs_1CB0 = globe_center_xy_offset;
+			cs_1CB2 = globe_center_xy_offset;
+			cs_1CAE = globe_center_xy_offset - 1;
 
 			ax = globdata[di - 1];
 			di -= uint8_as_int8(ax & 0xff);
@@ -168,6 +173,8 @@ void draw_globe(uint8_t *framebuffer) {
 			uint16_t ax_ = ax;
 			ax = globe_tilt_lookup_table[cs_1CAC + uint8_as_int8(ax & 0xff)];
 
+			// in: ax, si
+			// out: ax,bx,cx,dx
 			if (uint16_as_int16(ax) >= 0) {
 				ax = uint8_as_int8(ax & 0xff);
 				if (uint16_as_int16(ax) < 0) {
