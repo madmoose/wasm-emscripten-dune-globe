@@ -183,7 +183,7 @@ void draw_globe(uint8_t *framebuffer) {
 				ax = -ax;
 			}
 
-			uint16_t ax_ = ax;
+			uint16_t ax_ = ax; // not in use???
 			ax = globe_tilt_lookup_table[cs_1CAC + uint8_as_int8(ax & 0xff)];
 
 			{
