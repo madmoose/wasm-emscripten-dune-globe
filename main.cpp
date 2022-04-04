@@ -229,14 +229,19 @@ void draw_globe(uint8_t *framebuffer) {
 
 			auto pixel_color = [](uint16_t value)
 			{
-				uint8_t al = value & 0x0f;
+				//base color?
+				uint8_t color = value & 0x0f;
+
+				// this code is currently not in use
 				if ((value & 0x30) == 0x10) {
-					if (al < 8) {
-						al += 12;
+					// overlay color?
+					if (color < 8) {
+						color += 12;
 					}
 				}
-				al += 0x10;
-				return al;
+
+				color += 0x10;
+				return color;
 			};
 
 			constexpr uint16_t MAGIC_OFS1 = 0x62FC;
@@ -244,7 +249,7 @@ void draw_globe(uint8_t *framebuffer) {
 			framebuffer[cs_1CAE--] = pixel_color(sub_map[uint16_as_int16(some_offset(dx - ax, cx, bx))]);
 			framebuffer[cs_1CB0++] = pixel_color(sub_map[uint16_as_int16(some_offset(dx + ax - cx, cx, bx))]);
 
-			si += 200; // ORIGINAL_WIDTH?
+			si += 200; // FRAMEBUFFER_WIDTH?
 			ax = globdata[di++];
 			// al = ax & 0x00ff;
 		} while (uint8_as_int8(ax) >= 0);
