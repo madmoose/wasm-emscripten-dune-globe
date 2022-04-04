@@ -174,23 +174,23 @@ void draw_globe(uint8_t *framebuffer) {
 					ax = -ax;
 					uint16_t bp = ax;
 					bx = globdata[bp + si];
-					ax = globdata[bp + si + 0x64];
+					ax = globdata[bp + si + 100];
 
-					bp = bx;
-					bx = globe_rotation_lookup_table[2 * bp + 0];
-					cx = globe_rotation_lookup_table[2 * bp + 1];
-					dx = globe_rotation_lookup_table[2 * bp + 2];
+					bp = bx * 2;
+					bx = globe_rotation_lookup_table[bp + 0];
+					cx = globe_rotation_lookup_table[bp + 1];
+					dx = globe_rotation_lookup_table[bp + 2];
 
 					ax = cx - ax;
 				} else {
 					uint16_t bp = ax;
 					bx = globdata[bp + si];
-					ax = globdata[bp + si + 0x64];
+					ax = globdata[bp + si + 100];
 
-					bp = bx;
-					bx = globe_rotation_lookup_table[2 * bp + 0];
-					cx = globe_rotation_lookup_table[2 * bp + 1];
-					dx = globe_rotation_lookup_table[2 * bp + 2];
+					bp = bx * 2;
+					bx = globe_rotation_lookup_table[bp + 0];
+					cx = globe_rotation_lookup_table[bp + 1];
+					dx = globe_rotation_lookup_table[bp + 2];
 				}
 			} else {
 				ax = uint8_as_int8(ax & 0xff);
@@ -198,24 +198,24 @@ void draw_globe(uint8_t *framebuffer) {
 					ax = -ax;
 					uint16_t bp = ax;
 					bx = globdata[bp + si];
-					ax = globdata[bp + si + 0x64];
+					ax = globdata[bp + si + 100];
 
-					bp = bx;
-					bx = globe_rotation_lookup_table[2 * bp + 0];
-					cx = globe_rotation_lookup_table[2 * bp + 1];
-					dx = globe_rotation_lookup_table[2 * bp + 2];
+					bp = bx * 2;
+					bx = globe_rotation_lookup_table[bp + 0];
+					cx = globe_rotation_lookup_table[bp + 1];
+					dx = globe_rotation_lookup_table[bp + 2];
 
 					ax = cx - ax;
 					bx = -bx;
 				} else {
 					uint16_t bp = ax;
 					bx = globdata[bp + si];
-					ax = globdata[bp + si + 0x64];
+					ax = globdata[bp + si + 100];
 
-					bp = bx;
-					bx = globe_rotation_lookup_table[2 * bp + 0];
-					cx = globe_rotation_lookup_table[2 * bp + 1];
-					dx = globe_rotation_lookup_table[2 * bp + 2];
+					bp = bx * 2;
+					bx = globe_rotation_lookup_table[bp + 0];
+					cx = globe_rotation_lookup_table[bp + 1];
+					dx = globe_rotation_lookup_table[bp + 2];
 
 					bx = -bx;
 				}
@@ -262,7 +262,7 @@ void draw_globe(uint8_t *framebuffer) {
 				framebuffer[cs_1CB0++] = al;
 			}
 
-			si += 200;
+			si += 200; // ORIGINAL_WIDTH?
 			ax = globdata[di++];
 			// al = ax & 0x00ff;
 		} while (uint8_as_int8(ax) >= 0);
@@ -291,15 +291,16 @@ void draw_frame(void *user_data) {
 	uint8_t *screenbuffer = (uint8_t*)screen->pixels;
 	for (int i = 0; i != framebuffer.size(); ++i) {
 		int c = framebuffer[i];
+		unsigned c_offset = 3 * c;
 
 #ifdef _WIN32
-		unsigned char red = PAL_BIN[3 * c + 2];
-		unsigned char green = PAL_BIN[3 * c + 1];
-		unsigned char blue = PAL_BIN[3 * c + 0];
+		unsigned char red = PAL_BIN[c_offset + 2];
+		unsigned char green = PAL_BIN[c_offset + 1];
+		unsigned char blue = PAL_BIN[c_offset + 0];
 #else
-		unsigned char red = PAL_BIN[3 * c + 0];
-		unsigned char green = PAL_BIN[3 * c + 1];
-		unsigned char blue = PAL_BIN[3 * c + 2];
+		unsigned char red = PAL_BIN[c_offset + 0];
+		unsigned char green = PAL_BIN[c_offset + 1];
+		unsigned char blue = PAL_BIN[c_offset + 2];
 #endif
 
 #if 1
