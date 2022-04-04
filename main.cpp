@@ -189,7 +189,7 @@ void draw_globe(uint8_t *framebuffer) {
 			{
 				// in: ax, si
 				// out: ax,bx,cx,dx
-				const bool neg_bx = (uint16_as_int16(ax) < 0);
+				const bool neg_bx = uint16_as_int16(ax) < 0;
 				ax = uint8_as_int8(ax & 0xff);
 				const bool neg_ax = uint16_as_int16(ax) < 0;
 				if (neg_ax) {
