@@ -17,11 +17,11 @@ unsigned resolution_factor = 3; // 1=320x200, 2=640x40, 3=1280x800, ...
 #include "PAL.BIN.inc"
 #include "TABLAT.BIN.inc"
 
-const int ORIGINAL_WIDTH = 320;
-const int ORIGINAL_HEIGHT = 200;
+const int FRAMEBUFFER_WIDTH = 320;
+const int FRAMEBUFFER_HEIGHT = 200;
 
 SDL_Surface *screen = NULL;
-std::array<uint8_t, ORIGINAL_WIDTH*ORIGINAL_HEIGHT> framebuffer;
+std::array<uint8_t, FRAMEBUFFER_WIDTH* FRAMEBUFFER_HEIGHT> framebuffer;
 int          frame = 0;
 
 std::array<uint16_t, 396> globe_rotation_lookup_table;
@@ -116,17 +116,19 @@ void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
 	} while (i != globe_tilt_lookup_table.size() && v <= 0);
 }
 
-uint16_t frame_buffer_offset(int x_, int y_)
+inline
+uint16_t frame_buffer_offset(int x, int y)
 {
-  return y_ * ORIGINAL_WIDTH + x_;
+  return y * FRAMEBUFFER_WIDTH + x;
 }
 
-void draw_pixel(uint8_t* screen_, uint32_t offset_, uint8_t red_, uint8_t green_, uint8_t blue_, uint8_t alpha_)
+inline
+void draw_pixel(uint8_t* screen, uint32_t offset, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
 {
-	screen_[offset_ + 0] = red_;
-	screen_[offset_ + 1] = green_;
-	screen_[offset_ + 2] = blue_;
-	screen_[offset_ + 3] = 255;
+	screen[offset + 0] = red;
+	screen[offset + 1] = green;
+	screen[offset + 2] = blue;
+	screen[offset + 3] = 255;
 }
 
 void draw_globe(uint8_t *framebuffer) {
@@ -138,7 +140,7 @@ void draw_globe(uint8_t *framebuffer) {
 	uint16_t cs_1CAA = 3290; // offset into globdata
 	uint16_t cs_1CAC = MAX_TILT;   // offset into globe_tilt_lookup_table
 
-	uint16_t cs_1CB4 = -ORIGINAL_WIDTH; // screen width
+	uint16_t cs_1CB4 = -FRAMEBUFFER_WIDTH; // screen width
 
 	const uint16_t globe_center_xy_offset1 = frame_buffer_offset(160, 79);
 	uint16_t cs_1CB0 = globe_center_xy_offset1;
@@ -223,10 +225,10 @@ void draw_globe(uint8_t *framebuffer) {
 			bp += bx;
 			dx += ax;
 
-			auto func2 = [](uint16_t ax_)
+			auto func2 = [](uint16_t value)
 			{
-				uint8_t al = ax_ & 0x0f;
-				if ((ax_ & 0x30) == 0x10) {
+				uint8_t al = value & 0x0f;
+				if ((value & 0x30) == 0x10) {
 					if (al < 8) {
 						al += 12;
 					}
@@ -293,14 +295,14 @@ void draw_frame(void *user_data) {
 #endif
 
 #if 1
-		unsigned x = i / ORIGINAL_WIDTH;
-		unsigned y = i % ORIGINAL_WIDTH;
+		unsigned x = i / FRAMEBUFFER_WIDTH;
+		unsigned y = i % FRAMEBUFFER_WIDTH;
 		for (unsigned w = 0; w < resolution_factor; ++w)
 		{
 			for (unsigned h = 0; h < resolution_factor; ++h)
 			{
 				const unsigned pixel_offset = ((x * resolution_factor + w) 
-					                           * (ORIGINAL_WIDTH * resolution_factor) 
+					                           * (FRAMEBUFFER_WIDTH * resolution_factor) 
 					                           + (y * resolution_factor + h)) * 4;
 				draw_pixel(screenbuffer,pixel_offset,red,green,blue,255); 
 			}
@@ -327,7 +329,7 @@ int main() {
 		globe_rotation_lookup_table[i] = u;
 	}
 
-	screen = SDL_SetVideoMode(ORIGINAL_WIDTH*resolution_factor, ORIGINAL_HEIGHT*resolution_factor, 32, SDL_SWSURFACE);
+	screen = SDL_SetVideoMode(FRAMEBUFFER_WIDTH*resolution_factor, FRAMEBUFFER_HEIGHT*resolution_factor, 32, SDL_SWSURFACE);
 
 #ifdef TEST_SDL_LOCK_OPTS
 	EM_ASM("SDL.defaults.copyOnLock = false; SDL.defaults.discardOnLock = true; SDL.defaults.opaqueFrontBuffer = false;");
