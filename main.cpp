@@ -237,17 +237,21 @@ void draw_globe(uint8_t *framebuffer) {
 			bp += bx;
 			dx += ax;
 
-			ax = map[0x62FC + uint16_as_int16(bp)];
+			auto func2 = [](uint16_t ax_)
 			{
-				uint8_t al = ax & 0x0f;
-				if ((ax & 0x30) == 0x10) {
+				uint8_t al = ax_ & 0x0f;
+				if ((ax_ & 0x30) == 0x10) {
 					if (al < 8) {
 						al += 12;
 					}
 				}
 				al += 0x10;
+				return al;
+			};
 
-				framebuffer[cs_1CAE--] = al;
+			ax = map[0x62FC + uint16_as_int16(bp)];
+			{
+				framebuffer[cs_1CAE--] = func2(ax);
 			}
 
 			bp = dx - cx;
@@ -258,15 +262,7 @@ void draw_globe(uint8_t *framebuffer) {
 
 			ax = map[0x62FC + uint16_as_int16(bp)];
 			{
-				uint8_t al = ax & 0x0f;
-				if ((ax & 0x30) == 0x10) {
-					if (al < 8) {
-						al += 12;
-					}
-				}
-				al += 0x10;
-
-				framebuffer[cs_1CB0++] = al;
+				framebuffer[cs_1CB0++] = func2(ax);
 			}
 
 			si += 200; // ORIGINAL_WIDTH?
