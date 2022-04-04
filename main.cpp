@@ -273,7 +273,7 @@ void draw_globe(uint8_t *framebuffer) {
 		} while (uint8_as_int8(ax) >= 0);
 
 		cs_1CA6 = di;
-		cs_1CB2 = cs_1CB4 + cs_1CB2;
+		cs_1CB2 += cs_1CB4;
 		cs_1CB0 = cs_1CB2;
 		cs_1CAE = cs_1CB2 - 1;
 	} while (true);
