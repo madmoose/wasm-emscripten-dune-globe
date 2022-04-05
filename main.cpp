@@ -279,13 +279,8 @@ void draw_globe(uint8_t *framebuffer) {
 	} while (true);
 }
 
-void draw_frame(void *user_data) {
+void draw_frame(void *user_data, int16_t tilt, int16_t rotation) {
 	if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
-
-	float f = sinf(frame / 200.0);
-
-	int16_t tilt = -MAX_TILT * f;
-	int16_t rotation = 150 * frame;
 
 	precalculate_globe_rotation_lookup_table(rotation);
 	precalculate_globe_tilt_lookup_table(tilt);
@@ -329,9 +324,29 @@ void draw_frame(void *user_data) {
 	if (SDL_MUSTLOCK(screen)) SDL_UnlockSurface(screen);
 
 	SDL_Flip(screen);
-
-	frame++;
 }
+
+struct pos_t
+{
+	int16_t tilt{};
+	int16_t rotation{};
+};
+
+struct animated_t
+{
+	int frame{0};
+
+	pos_t next()
+	{
+		float f = sinf(frame / 200.0);
+		int16_t tilt = -MAX_TILT * f;
+		int16_t rotation = 150 * frame;
+
+		frame++;
+
+		return { tilt, rotation };
+	}
+};
 
 extern "C"
 int main() {
@@ -352,7 +367,42 @@ int main() {
 	emscripten_set_main_loop_arg(draw_frame, NULL, -1, 1);
 #else
 	bool run = true;
+
+	bool is_animated = false;
+	animated_t animated;
+
+	pos_t cursor_based;
+
 	while (run) {
+		SDL_PumpEvents();
+		Uint8* keystate = SDL_GetKeyState(NULL);
+
+		constexpr int16_t ROTATION_STEP = 100;
+
+		//continuous-response keys
+		if (keystate[SDLK_LEFT])
+		{
+			cursor_based.rotation += ROTATION_STEP;
+		}
+		if (keystate[SDLK_RIGHT])
+		{
+			cursor_based.rotation -= ROTATION_STEP;
+		}
+		if (keystate[SDLK_UP])
+		{
+			if (cursor_based.tilt < MAX_TILT - 1)
+			{
+				++cursor_based.tilt;
+			}
+		}
+		if (keystate[SDLK_DOWN])
+		{
+			if (cursor_based.tilt > -MAX_TILT - 1)
+			{
+				--cursor_based.tilt;
+			}
+		}
+
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {  // poll until all events are handled!
 			if (event.type == SDL_QUIT)
@@ -360,9 +410,24 @@ int main() {
 				run = false;
 				break;
 			}
+			if (event.type == SDL_KEYDOWN)
+			{
+				//Set the proper message surface
+				switch (event.key.keysym.sym)
+				{
+				case SDLK_a:
+					is_animated = !is_animated;
+					break;
+				}
+			}
 		}
 
-		draw_frame(nullptr);
+		if (is_animated)
+		{
+			cursor_based = animated.next();
+		}
+		draw_frame(nullptr, cursor_based.tilt, cursor_based.rotation);
+
 		SDL_Delay(10);
 	}
 #endif
