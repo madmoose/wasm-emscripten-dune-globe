@@ -17,15 +17,16 @@ unsigned resolution_factor = 3; // 1=320x200, 2=640x40, 3=1280x800, ...
 #include "PAL.BIN.inc"
 #include "TABLAT.BIN.inc"
 
-const int FRAMEBUFFER_WIDTH = 320;
-const int FRAMEBUFFER_HEIGHT = 200;
+constexpr int FRAMEBUFFER_WIDTH = 320;
+constexpr int FRAMEBUFFER_HEIGHT = 200;
 
 SDL_Surface *screen = NULL;
 std::array<uint8_t, FRAMEBUFFER_WIDTH* FRAMEBUFFER_HEIGHT> framebuffer;
 int          frame = 0;
 
-std::array<uint16_t, 396> globe_rotation_lookup_table;
-std::array<uint16_t, 196> globe_tilt_lookup_table;
+const uint16_t MAX_TILT = 98;
+std::array<uint16_t, 396> globe_rotation_lookup_table; // MAX_TILT related see precalculate_globe_rotation_lookup_table
+std::array<uint16_t, 196> globe_tilt_lookup_table;  // MAX_TILT * 2 ?
 
 inline
 int8_t uint8_as_int8(uint8_t u) {
@@ -36,8 +37,6 @@ inline
 int16_t uint16_as_int16(uint16_t u) {
 	return u < INT16_MAX ? u : u - UINT16_MAX - 1;
 }
-
-const uint16_t MAX_TILT = 98;
 
 /*
  *  globe_rotation is value from 0x0000 - 0xffff.
@@ -61,15 +60,18 @@ void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
 	uint16_t bx = dxax / MAGIC_VALUE;
 
 	for (int i = 1; i != MAX_TILT+1; ++i) {
-		uint32_t dxax = 2 * uint32_t(bx) * uint32_t(globe_rotation_lookup_table[4 * i + 1]);
-		globe_rotation_lookup_table[4 * i + 2] = (dxax >> 16) & 0xffff;
-		globe_rotation_lookup_table[4 * i + 3] = (dxax >>  0) & 0xffff;
+		const int offset = i * 4;
+		uint32_t dxax = 2 * uint32_t(bx) * uint32_t(globe_rotation_lookup_table[offset + 1]);
+		globe_rotation_lookup_table[offset + 2] = (dxax >> 16) & 0xffff;
+		globe_rotation_lookup_table[offset + 3] = (dxax >>  0) & 0xffff;
 	}
 }
 
 void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
 	int i = 0;
 
+	// with C++17
+	//globe_tilt = std::clamp(globe_tilt, -MAX_TILT, MAX_TILT);
 	if (globe_tilt < -MAX_TILT) {
 		globe_tilt = -MAX_TILT;
 	}
@@ -279,10 +281,28 @@ void draw_globe(uint8_t *framebuffer) {
 	} while (true);
 }
 
+inline
+void init_globe_rotation_lookup_table()
+{
+	//TABLAT_BIN are uint16_t values in byte range
+	//two of them form a real uint16_t 
+	for (int i = 0; i != globe_rotation_lookup_table.size(); i++) {
+		uint16_t u = (TABLAT_BIN[2 * i + 0] << 0) + (TABLAT_BIN[2 * i + 1] << 8);
+		globe_rotation_lookup_table[i] = u;
+	}
+}
+
+// to show that the table data is not changing over the time
+#define ALWAYS_INIT() (true)
+
 void draw_frame(void *user_data, int16_t tilt, int16_t rotation) {
 	if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
 
+#if ALWAYS_INIT()
+	init_globe_rotation_lookup_table();
+#endif
 	precalculate_globe_rotation_lookup_table(rotation);
+
 	precalculate_globe_tilt_lookup_table(tilt);
 
 	draw_globe(framebuffer.data());
@@ -352,10 +372,9 @@ extern "C"
 int main() {
 	SDL_Init(SDL_INIT_VIDEO);
 
-	for (int i = 0; i != globe_rotation_lookup_table.size(); i++) {
-		uint16_t u = (TABLAT_BIN[2*i + 0] << 0) + (TABLAT_BIN[2*i+ 1 ] << 8);
-		globe_rotation_lookup_table[i] = u;
-	}
+#if !ALWAYS_INIT()
+	init_globe_rotation_lookup_table();
+#endif
 
 	screen = SDL_SetVideoMode(FRAMEBUFFER_WIDTH*resolution_factor, FRAMEBUFFER_HEIGHT*resolution_factor, 32, SDL_SWSURFACE);
 
@@ -425,6 +444,10 @@ int main() {
 		if (is_animated)
 		{
 			cursor_based = animated.next();
+		}
+		else
+		{
+			animated.frame = cursor_based.rotation / 150;
 		}
 		draw_frame(nullptr, cursor_based.tilt, cursor_based.rotation);
 
