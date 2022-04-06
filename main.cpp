@@ -236,7 +236,7 @@ void draw_globe(uint8_t *framebuffer) {
 				return result_t{gd, grlt_0, grlt_1, grlt_2 };
 			};
 
-			auto some_offset = [](int16_t value, int16_t adjust1, int16_t adjust2) {
+			auto some_offset = [](int value, int adjust1, int adjust2) {
 				if (value < 0) {
 					value += adjust1;
 				}
