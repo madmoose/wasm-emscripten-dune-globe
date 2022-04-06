@@ -315,15 +315,7 @@ void init_globe_rotation_lookup_table() {
 	const rotation_lookup_table_entry_t* tablat_entries = reinterpret_cast<const rotation_lookup_table_entry_t*>(&TABLAT_BIN);
 
 	for (int i = 0; i != globe_rotation_lookup_table.size(); i++) {
-		
-		const auto& tablat_entry = tablat_entries[i];
-		auto& table_entry = globe_rotation_lookup_table[i];
-
-		// beware of big-endian systems here
-		table_entry.unk0 = tablat_entry.unk0;
-		table_entry.unk1 = tablat_entry.unk1;
-		table_entry.fp_hi = tablat_entry.fp_hi;
-		table_entry.fp_lo = tablat_entry.fp_lo;
+		globe_rotation_lookup_table[i] = tablat_entries[i];
 	}
 }
 
