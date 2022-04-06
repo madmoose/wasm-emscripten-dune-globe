@@ -32,7 +32,7 @@ struct rotation_lookup_table_entry_t {
 };
 static_assert(sizeof(rotation_lookup_table_entry_t) == 8, "wrong size");
 
-constexpr uint16_t MAX_TILT = 98;
+constexpr uint16_t MAX_TILT = 98; // 200/2 - 2?
 using globe_rotation_lookup_table_t = std::array<rotation_lookup_table_entry_t, MAX_TILT+1>; // MAX_TILT related see precalculate_globe_rotation_lookup_table
 globe_rotation_lookup_table_t globe_rotation_lookup_table;
 std::array<uint16_t, MAX_TILT*2> globe_tilt_lookup_table;
@@ -341,6 +341,13 @@ std::array<uint8_t, 3> pal_color(int color_index)
 	return { triple[0], triple[1], triple[2] };
 }
 
+#define COMPARE_WITH_INITAL_CODE() (true)
+
+namespace initial_port
+{
+	void draw_frame(int16_t tilt, int16_t rotation, uint8_t* framebuffer);
+}
+
 void draw_frame(void *draw_params) {
 	if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
 
@@ -357,6 +364,15 @@ void draw_frame(void *draw_params) {
 
 	draw_globe(framebuffer.data());
 
+#if COMPARE_WITH_INITAL_CODE()
+	std::array<uint8_t, FRAMEBUFFER_WIDTH* FRAMEBUFFER_HEIGHT> test_framebuffer{};
+	initial_port::draw_frame(tilt, rotation, test_framebuffer.data());
+	if (framebuffer != test_framebuffer)
+	{
+		throw 0xdeadbeef;
+	}
+#endif
+	
 	uint8_t *screenbuffer = (uint8_t*)screen->pixels;
 
 	for (int i = 0; i != framebuffer.size(); ++i) {
