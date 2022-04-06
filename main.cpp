@@ -38,16 +38,6 @@ globe_rotation_lookup_table_t globe_rotation_lookup_table;
 std::array<uint16_t, 196> globe_tilt_lookup_table;  // MAX_TILT * 2 ?
 
 inline
-int8_t uint8_as_int8(uint8_t u) {
-	return u < INT8_MAX ? u : u - UINT8_MAX - 1;
-}
-
-inline
-int16_t uint16_as_int16(uint16_t u) {
-	return u < INT16_MAX ? u : u - UINT16_MAX - 1;
-}
-
-inline
 uint16_t hi(uint32_t v) {
 	return (v >> 16) & 0xffff;
 }
@@ -55,6 +45,16 @@ uint16_t hi(uint32_t v) {
 inline
 uint16_t lo(uint32_t v) {
 	return (v >> 0) & 0xffff;
+}
+
+inline
+int8_t hi(int16_t v) {
+	return v >> 8;
+}
+
+inline
+int8_t lo(int16_t v) {
+	return v & 0xff;
 }
 
 /*
@@ -162,12 +162,14 @@ void draw_pixel(uint8_t* screen, uint32_t offset, uint8_t red, uint8_t green, ui
 	screen[offset + 3] = alpha;
 }
 
+constexpr int MAGIC_200 = 200;  // FRAMEBUFFER_HEIGHT?
+
 void draw_globe(uint8_t *framebuffer) {
 	const uint8_t  *globdata = GLOBDATA_BIN;
 	const uint8_t  *map      = MAP_BIN;
 
 	uint16_t cs_1CA6 = 1;    // offset into globdata
-	uint16_t cs_1CB4 = -FRAMEBUFFER_WIDTH; // screen width
+	int16_t cs_1CB4 = -FRAMEBUFFER_WIDTH; // screen width
 
 	const uint16_t globe_center_xy_offset1 = frame_buffer_offset(160, 79);
 	uint16_t cs_1CB0 = globe_center_xy_offset1;
@@ -177,16 +179,16 @@ void draw_globe(uint8_t *framebuffer) {
 	bool drawing_southern_hemisphere = false;
 
 	do {
-		uint16_t di = cs_1CA6; // offset into globdata
+		int16_t di = cs_1CA6; // offset into globdata
 
-		uint16_t ax = globdata[di++];
+		int8_t gd_val = globdata[di++];
 
-		if (uint8_as_int8(ax & 0xff) < 0) {
+		if (gd_val < 0) {
 			drawing_southern_hemisphere = true;
 			di = 1;
 
 			cs_1CB4 = -cs_1CB4;
-			if (uint16_as_int16(cs_1CB4) < 0) {
+			if (cs_1CB4 < 0) {
 				return;
 			}
 
@@ -195,20 +197,17 @@ void draw_globe(uint8_t *framebuffer) {
 			cs_1CB2 = globe_center_xy_offset;
 			cs_1CAE = globe_center_xy_offset - 1;
 
-			ax = globdata[di - 1];
-			di -= uint8_as_int8(ax & 0xff);
-			ax = globdata[di++];
+			gd_val = globdata[di - 1];
+			di -= gd_val;
+			gd_val = globdata[di++];
 		}
 
-		uint16_t si = 3290; // offset into globdata
+		int16_t si = 3290; // offset into globdata
 
 		do {
 			if (drawing_southern_hemisphere) {
-				ax = -ax;
+				gd_val = -gd_val;
 			}
-
-			uint16_t ax_ = ax; // not in use???
-			ax = globe_tilt_lookup_table[MAX_TILT + uint8_as_int8(ax & 0xff)];
 
 			struct result_t
 			{
@@ -218,18 +217,21 @@ void draw_globe(uint8_t *framebuffer) {
 				uint16_t grlt_2{};
 			};
 
-			auto func1 = [](const uint8_t* globdata_, const globe_rotation_lookup_table_t& rotation_lookup_table, uint16_t ofs1/*ax*/, uint16_t base_ofs/*si*/) {
-				const bool neg_bx = uint16_as_int16(ofs1) < 0;
+			auto func1 = [](const uint8_t* globdata_, const globe_rotation_lookup_table_t& rotation_lookup_table, int16_t ofs1, int16_t base_ofs) {
+				const bool neg_bx = ofs1 < 0; // hi(ofs1) < 0 && lo(ofs1)
 
-				uint16_t offset1 = uint8_as_int8(ofs1 & 0xff);
-				const bool neg_ax = uint16_as_int16(offset1) < 0;
+				// hi(ofs1) is execept the <0 check above not used after precalculate_globe_tilt_lookup_table
+
+				int8_t offset1 = lo(ofs1);
+				const bool neg_ax = offset1 < 0;
+
 				if (neg_ax) {
 					offset1 = -offset1;
 				}
 
 				const uint8_t* sub_globdata = &globdata_[base_ofs + offset1];
 				// 1 result
-				uint16_t gd = sub_globdata[200/2];
+				uint16_t gd = sub_globdata[MAGIC_200 /2];
 
 				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4*uint16_t
 				const uint16_t index = sub_globdata[0] / 2;
@@ -254,15 +256,15 @@ void draw_globe(uint8_t *framebuffer) {
 				return result_t{gd, grlt_0, grlt_1, grlt_2 };
 			};
 
-			auto some_offset = [](uint16_t value, uint16_t adjust1, uint16_t adjust2) {
-				if (uint16_as_int16(value) < 0) {
+			auto some_offset = [](int16_t value, int16_t adjust1, int16_t adjust2) {
+				if (value < 0) {
 					value += adjust1;
 				}
 				value += adjust2;
 				return value;
 			};
 
-			auto pixel_color = [](uint16_t value) {
+			auto pixel_color = [](uint8_t value) {
 				//base color?
 				uint8_t color = value & 0x0f;
 
@@ -281,24 +283,27 @@ void draw_globe(uint8_t *framebuffer) {
 			constexpr uint16_t MAGIC_OFS1 = 0x62FC;
 			const uint8_t* sub_map = &map[MAGIC_OFS1];
 
+			// hi,lo int8 values?
+			uint16_t ax = globe_tilt_lookup_table[MAX_TILT + gd_val];
+
 			const result_t res = func1(globdata, globe_rotation_lookup_table, ax, si);
 
-			const int16_t ofs1 = uint16_as_int16(some_offset(
+			const int16_t ofs1 = some_offset(
 				res.grlt_2 - res.gd,
 				res.grlt_1,
-				res.grlt_0));
+				res.grlt_0);
 			framebuffer[cs_1CAE--] = pixel_color(sub_map[ofs1]);
 
-			const int16_t ofs2 = uint16_as_int16(some_offset(
+			const int16_t ofs2 = some_offset(
 				res.grlt_2 + res.gd - res.grlt_1,
 				res.grlt_1,
-				res.grlt_0));
+				res.grlt_0);
 			framebuffer[cs_1CB0++] = pixel_color(sub_map[ofs2]);
 
-			si += 200; // FRAMEBUFFER_HEIGHT?
-			ax = globdata[di++];
+			si += MAGIC_200;
+			gd_val = globdata[di++];
 			// al = ax & 0x00ff;
-		} while (uint8_as_int8(ax) >= 0);
+		} while (gd_val >= 0);
 
 		cs_1CA6 = di;
 		cs_1CB2 += cs_1CB4;
