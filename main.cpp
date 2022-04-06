@@ -181,7 +181,7 @@ void draw_globe(uint8_t *framebuffer) {
 	do {
 		int di = cs_1CA6; // offset into globdata
 
-		int8_t gd_val = globdata[di++];
+		int gd_val = globdata[di++];
 
 		if (gd_val < 0) {
 			drawing_southern_hemisphere = true;
