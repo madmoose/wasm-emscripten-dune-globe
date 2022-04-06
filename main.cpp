@@ -222,10 +222,10 @@ void draw_globe(uint8_t *framebuffer) {
 				const uint8_t* sub_globdata = &globdata_[base_ofs + offset1];
 
 				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4*uint16_t
-				const uint16_t index = sub_globdata[0] / 2;
-
+				const int index = int(sub_globdata[0]) / 2;
 				const auto& entry = globe_rotation_lookup_table[index];
 
+				// hi & lo < 0?
 				const uint16_t grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
 				const uint16_t grlt_2 = entry.fp_hi;
 
