@@ -160,14 +160,14 @@ void draw_pixel(uint8_t* screen, uint32_t offset, uint8_t red, uint8_t green, ui
 	screen[offset + 0] = red;
 	screen[offset + 1] = green;
 	screen[offset + 2] = blue;
-	screen[offset + 3] = 255;
+	screen[offset + 3] = alpha;
 }
 
 void draw_globe(uint8_t *framebuffer) {
 	const uint8_t  *globdata = GLOBDATA_BIN;
 	const uint8_t  *map      = MAP_BIN;
 
-	rotation_lookup_table_entry_t* rotation_lookup_table 
+	const rotation_lookup_table_entry_t* rotation_lookup_table 
 		= reinterpret_cast<rotation_lookup_table_entry_t*>(globe_rotation_lookup_table.data());
 
 	uint16_t cs_1CA6 = 1;    // offset into globdata
@@ -222,7 +222,7 @@ void draw_globe(uint8_t *framebuffer) {
 				uint16_t grlt_2{};
 			};
 
-			auto func1 = [](const uint8_t* globdata_, rotation_lookup_table_entry_t* rotation_lookup_table, uint16_t ofs1/*ax*/, uint16_t base_ofs/*si*/)
+			auto func1 = [](const uint8_t* globdata_, const rotation_lookup_table_entry_t* rotation_lookup_table, uint16_t ofs1/*ax*/, uint16_t base_ofs/*si*/)
 			{
 				const bool neg_bx = uint16_as_int16(ofs1) < 0;
 				
