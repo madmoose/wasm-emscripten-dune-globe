@@ -371,6 +371,7 @@ void draw_frame(void *draw_params) {
 	if (framebuffer != test_framebuffer)
 	{
 		assert(false);
+		printf("framebuffer != test_framebuffer rotation=%u, tilt=%i\n", rotation, tilt);
 		throw 0xdeadbeef;
 	}
 #endif
