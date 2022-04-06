@@ -24,8 +24,16 @@ SDL_Surface *screen = NULL;
 std::array<uint8_t, FRAMEBUFFER_WIDTH* FRAMEBUFFER_HEIGHT> framebuffer;
 int          frame = 0;
 
+struct rotation_lookup_table_entry_t
+{
+	uint16_t unk0;
+	uint16_t unk1;
+	uint16_t fp_hi;
+	uint16_t fp_lo;
+};
+
 const uint16_t MAX_TILT = 98;
-std::array<uint16_t, 396> globe_rotation_lookup_table; // MAX_TILT related see precalculate_globe_rotation_lookup_table
+std::array<rotation_lookup_table_entry_t, 99> globe_rotation_lookup_table; // MAX_TILT related see precalculate_globe_rotation_lookup_table
 std::array<uint16_t, 196> globe_tilt_lookup_table;  // MAX_TILT * 2 ?
 
 inline
@@ -38,7 +46,7 @@ int16_t uint16_as_int16(uint16_t u) {
 	return u < INT16_MAX ? u : u - UINT16_MAX - 1;
 }
 
-inline 
+inline
 uint16_t hi(uint32_t value_)
 {
 	return (value_ >> 16) & 0xffff;
@@ -50,15 +58,10 @@ uint16_t lo(uint32_t value_)
 	return (value_ >> 0) & 0xffff;
 }
 
-#pragma pack(push,1)
-struct rotation_lookup_table_entry_t
-{
-	uint16_t unk0;
-	uint16_t unk1;
-	uint16_t fp_hi;
-	uint16_t fp_lo;
-};
-#pragma pack(pop)
+uint16_t read_uint16_le(uint8_t *p) {
+	return (p[0] <<  0)
+         | (p[1] << 16);
+}
 
 /*
  *  globe_rotation is value from 0x0000 - 0xffff.
@@ -72,9 +75,7 @@ void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
 	// Floor the 16.16 fp value
 	dxax &= ~0xffff;
 
-	rotation_lookup_table_entry_t* entries = reinterpret_cast<rotation_lookup_table_entry_t*>(globe_rotation_lookup_table.data());
-
-	auto& first = entries[0];
+	auto& first = globe_rotation_lookup_table[0];
 
 	assert(first.unk0 == 0);
 	assert(first.unk1 != 0);
@@ -88,7 +89,7 @@ void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
 	uint16_t bx = dxax / MAGIC_VALUE;
 
 	for (int i = 1; i != MAX_TILT+1; ++i) {
-		auto& entry = entries[i];
+		auto& entry = globe_rotation_lookup_table[i];
 
 		assert(entry.unk0 != 0); // meaning?
 		uint32_t dxax = 2 * uint32_t(bx) * uint32_t(entry.unk1);
@@ -167,9 +168,6 @@ void draw_globe(uint8_t *framebuffer) {
 	const uint8_t  *globdata = GLOBDATA_BIN;
 	const uint8_t  *map      = MAP_BIN;
 
-	const rotation_lookup_table_entry_t* rotation_lookup_table 
-		= reinterpret_cast<rotation_lookup_table_entry_t*>(globe_rotation_lookup_table.data());
-
 	uint16_t cs_1CA6 = 1;    // offset into globdata
 	uint16_t cs_1CB4 = -FRAMEBUFFER_WIDTH; // screen width
 
@@ -193,7 +191,7 @@ void draw_globe(uint8_t *framebuffer) {
 			if (uint16_as_int16(cs_1CB4) < 0) {
 				return;
 			}
-			
+
 			const uint16_t globe_center_xy_offset = frame_buffer_offset(160, 80);
 			cs_1CB0 = globe_center_xy_offset;
 			cs_1CB2 = globe_center_xy_offset;
@@ -222,10 +220,10 @@ void draw_globe(uint8_t *framebuffer) {
 				uint16_t grlt_2{};
 			};
 
-			auto func1 = [](const uint8_t* globdata_, const rotation_lookup_table_entry_t* rotation_lookup_table, uint16_t ofs1/*ax*/, uint16_t base_ofs/*si*/)
+			auto func1 = [](const uint8_t* globdata_, const std::array<rotation_lookup_table_entry_t, 99> &rotation_lookup_table, uint16_t ofs1/*ax*/, uint16_t base_ofs/*si*/)
 			{
 				const bool neg_bx = uint16_as_int16(ofs1) < 0;
-				
+
 				uint16_t offset1 = uint8_as_int8(ofs1 & 0xff);
 				const bool neg_ax = uint16_as_int16(offset1) < 0;
 				if (neg_ax) {
@@ -239,7 +237,7 @@ void draw_globe(uint8_t *framebuffer) {
 				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4 bytes
 				const uint16_t index = sub_globdata[0] / 2;
 				// 3 results from globe_rotation_lookup_table
-				const auto& entry = rotation_lookup_table[index];
+				const auto& entry = globe_rotation_lookup_table[index];
 
 				uint16_t grlt_0 = entry.unk0;
 				uint16_t grlt_1 = entry.unk1;
@@ -287,7 +285,7 @@ void draw_globe(uint8_t *framebuffer) {
 			constexpr uint16_t MAGIC_OFS1 = 0x62FC;
 			const uint8_t* sub_map = &map[MAGIC_OFS1];
 
-			const result_t res = func1(globdata, rotation_lookup_table, ax, si);
+			const result_t res = func1(globdata, globe_rotation_lookup_table, ax, si);
 
 			const int16_t ofs1 = uint16_as_int16(some_offset(
 				res.grlt_2 - res.gd,
@@ -313,22 +311,28 @@ void draw_globe(uint8_t *framebuffer) {
 	} while (true);
 }
 
-inline
-void init_globe_rotation_lookup_table()
-{
-	//TABLAT_BIN are uint16_t values in byte range
-	//two of them form a real uint16_t 
+void init_globe_rotation_lookup_table() {
 	for (int i = 0; i != globe_rotation_lookup_table.size(); i++) {
-		uint16_t u = (TABLAT_BIN[2 * i + 0] << 0) + (TABLAT_BIN[2 * i + 1] << 8);
-		globe_rotation_lookup_table[i] = u;
+		globe_rotation_lookup_table[i].unk0  = read_uint16_le(&TABLAT_BIN[8 * i + 0]);
+		globe_rotation_lookup_table[i].unk1  = read_uint16_le(&TABLAT_BIN[8 * i + 2]);
+		globe_rotation_lookup_table[i].fp_hi = read_uint16_le(&TABLAT_BIN[8 * i + 4]);
+		globe_rotation_lookup_table[i].fp_lo = read_uint16_le(&TABLAT_BIN[8 * i + 6]);
 	}
 }
 
 // to show that the table data is not changing over the time
 #define ALWAYS_INIT() (true)
 
-void draw_frame(void *user_data, int16_t tilt, int16_t rotation) {
+struct draw_params_t {
+	int16_t  tilt;
+	uint16_t rotation;
+};
+
+void draw_frame(void *draw_params) {
 	if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
+
+	int16_t  tilt     = ((draw_params_t *)draw_params)->tilt;
+	uint16_t rotation = ((draw_params_t *)draw_params)->rotation;
 
 #if ALWAYS_INIT()
 	init_globe_rotation_lookup_table();
@@ -345,13 +349,13 @@ void draw_frame(void *user_data, int16_t tilt, int16_t rotation) {
 		unsigned c_offset = 3 * c;
 
 #ifdef _WIN32
-		unsigned char red = PAL_BIN[c_offset + 2];
-		unsigned char green = PAL_BIN[c_offset + 1];
-		unsigned char blue = PAL_BIN[c_offset + 0];
+		unsigned char r = PAL_BIN[c_offset + 2];
+		unsigned char g = PAL_BIN[c_offset + 1];
+		unsigned char b = PAL_BIN[c_offset + 0];
 #else
-		unsigned char red = PAL_BIN[c_offset + 0];
-		unsigned char green = PAL_BIN[c_offset + 1];
-		unsigned char blue = PAL_BIN[c_offset + 2];
+		unsigned char r = PAL_BIN[c_offset + 0];
+		unsigned char g = PAL_BIN[c_offset + 1];
+		unsigned char b = PAL_BIN[c_offset + 2];
 #endif
 
 #if 1
@@ -361,15 +365,15 @@ void draw_frame(void *user_data, int16_t tilt, int16_t rotation) {
 		{
 			for (unsigned h = 0; h < resolution_factor; ++h)
 			{
-				const unsigned pixel_offset = ((x * resolution_factor + w) 
-					                           * (FRAMEBUFFER_WIDTH * resolution_factor) 
+				const unsigned pixel_offset = ((x * resolution_factor + w)
+					                           * (FRAMEBUFFER_WIDTH * resolution_factor)
 					                           + (y * resolution_factor + h)) * 4;
-				draw_pixel(screenbuffer,pixel_offset,red,green,blue,255); 
+				draw_pixel(screenbuffer, pixel_offset, r, g, b, 255);
 			}
 		}
 #else
 		const unsigned pixel_offset = 4 * i;
-        draw_pixel(screenbuffer,pixel_offset,red,green,blue,255); 
+        draw_pixel(screenbuffer, pixel_offset, red, g, b, 255);
 #endif
 	}
 
@@ -481,7 +485,10 @@ int main() {
 		{
 			animated.frame = cursor_based.rotation / 150;
 		}
-		draw_frame(nullptr, cursor_based.tilt, cursor_based.rotation);
+		draw_frame(&draw_params_t{
+			.tilt = cursor_based.tilt,
+			.rotation = cursor_based.rotation,
+		});
 
 		SDL_Delay(10);
 	}
