@@ -31,8 +31,14 @@ struct rotation_lookup_table_entry_t {
 	uint16_t fp_lo;
 };
 
+#define USE_OLD_TABLE() (true)
+
 const uint16_t MAX_TILT = 98;
+#if USE_OLD_TABLE()
+std::array<uint16_t, 396> globe_rotation_lookup_table; // MAX_TILT related see precalculate_globe_rotation_lookup_table
+#else
 std::array<rotation_lookup_table_entry_t, 99> globe_rotation_lookup_table; // MAX_TILT related see precalculate_globe_rotation_lookup_table
+#endif
 std::array<uint16_t, 196> globe_tilt_lookup_table;  // MAX_TILT * 2 ?
 
 inline
@@ -56,8 +62,8 @@ uint16_t lo(uint32_t v) {
 }
 
 uint16_t read_uint16_le(uint8_t *p) {
-	return (p[0] <<  0)
-         | (p[1] << 16);
+	return (p[0] << 0)
+		| (p[1] << 16);
 }
 
 /*
@@ -72,7 +78,13 @@ void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
 	// Floor the 16.16 fp value
 	dxax &= ~0xffff;
 
+
+#if USE_OLD_TABLE()
+	rotation_lookup_table_entry_t* entries = reinterpret_cast<rotation_lookup_table_entry_t*>(globe_rotation_lookup_table.data());
+	auto& first = entries[0];
+#else
 	auto& first = globe_rotation_lookup_table[0];
+#endif
 
 	assert(first.unk0 == 0);
 	assert(first.unk1 != 0);
@@ -86,7 +98,11 @@ void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
 	uint16_t bx = dxax / MAGIC_VALUE;
 
 	for (int i = 1; i != MAX_TILT+1; ++i) {
+#if USE_OLD_TABLE()
+		auto& entry = entries[i];
+#else
 		auto& entry = globe_rotation_lookup_table[i];
+#endif
 
 		assert(entry.unk0 != 0); // meaning?
 		uint32_t dxax = 2 * uint32_t(bx) * uint32_t(entry.unk1);
@@ -215,7 +231,11 @@ void draw_globe(uint8_t *framebuffer) {
 				uint16_t grlt_2{};
 			};
 
+#if USE_OLD_TABLE()
+			auto func1 = [](const uint8_t* globdata_, const rotation_lookup_table_entry_t* rotation_lookup_table, uint16_t ofs1/*ax*/, uint16_t base_ofs/*si*/) {
+#else
 			auto func1 = [](const uint8_t* globdata_, const std::array<rotation_lookup_table_entry_t, 99> &rotation_lookup_table, uint16_t ofs1/*ax*/, uint16_t base_ofs/*si*/) {
+#endif
 				const bool neg_bx = uint16_as_int16(ofs1) < 0;
 
 				uint16_t offset1 = uint8_as_int8(ofs1 & 0xff);
@@ -231,7 +251,12 @@ void draw_globe(uint8_t *framebuffer) {
 				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4 bytes
 				const uint16_t index = sub_globdata[0] / 2;
 				// 3 results from globe_rotation_lookup_table
+
+#if USE_OLD_TABLE()
+				const auto& entry = rotation_lookup_table[index];
+#else
 				const auto& entry = globe_rotation_lookup_table[index];
+#endif
 
 				uint16_t grlt_0 = entry.unk0;
 				uint16_t grlt_1 = entry.unk1;
@@ -277,7 +302,12 @@ void draw_globe(uint8_t *framebuffer) {
 			constexpr uint16_t MAGIC_OFS1 = 0x62FC;
 			const uint8_t* sub_map = &map[MAGIC_OFS1];
 
+#if USE_OLD_TABLE()
+			rotation_lookup_table_entry_t* entries = reinterpret_cast<rotation_lookup_table_entry_t*>(globe_rotation_lookup_table.data());
+			const result_t res = func1(globdata, entries, ax, si);
+#else
 			const result_t res = func1(globdata, globe_rotation_lookup_table, ax, si);
+#endif
 
 			const int16_t ofs1 = uint16_as_int16(some_offset(
 				res.grlt_2 - res.gd,
@@ -305,10 +335,16 @@ void draw_globe(uint8_t *framebuffer) {
 
 void init_globe_rotation_lookup_table() {
 	for (int i = 0; i != globe_rotation_lookup_table.size(); i++) {
-		globe_rotation_lookup_table[i].unk0  = read_uint16_le(&TABLAT_BIN[8 * i + 0]);
-		globe_rotation_lookup_table[i].unk1  = read_uint16_le(&TABLAT_BIN[8 * i + 2]);
+#if USE_OLD_TABLE()
+		const int offset = i * 2;
+		uint16_t u = (TABLAT_BIN[offset + 0] << 0) + (TABLAT_BIN[offset + 1] << 8);
+		globe_rotation_lookup_table[i] = u;
+#else
+		globe_rotation_lookup_table[i].unk0 = read_uint16_le(&TABLAT_BIN[8 * i + 0]);
+		globe_rotation_lookup_table[i].unk1 = read_uint16_le(&TABLAT_BIN[8 * i + 2]);
 		globe_rotation_lookup_table[i].fp_hi = read_uint16_le(&TABLAT_BIN[8 * i + 4]);
 		globe_rotation_lookup_table[i].fp_lo = read_uint16_le(&TABLAT_BIN[8 * i + 6]);
+#endif
 	}
 }
 
@@ -457,10 +493,8 @@ int main() {
 			animated.frame = cursor_based.rotation / 150;
 		}
 
-		draw_frame(&draw_params_t{
-			.tilt     = cursor_based.tilt,
-			.rotation = cursor_based.rotation,
-		});
+		draw_params_t dp{ cursor_based.tilt , cursor_based.rotation };
+		draw_frame(&dp);
 
 		SDL_Delay(10);
 	}
