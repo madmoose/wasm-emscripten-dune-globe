@@ -341,14 +341,16 @@ std::array<uint8_t, 3> pal_color(int color_index)
 	return { triple[0], triple[1], triple[2] };
 }
 
-#define COMPARE_WITH_INITAL_CODE() (true)
+#define COMPARE_WITH_INITAL_CODE() (false)
 
+#if COMPARE_WITH_INITAL_CODE()
 namespace initial_port
 {
 	void draw_frame(int16_t tilt, int16_t rotation, uint8_t* framebuffer);
 }
 
 std::array<uint8_t, FRAMEBUFFER_WIDTH* FRAMEBUFFER_HEIGHT> test_framebuffer{};
+#endif
 
 void draw_frame(void *draw_params) {
 	if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);

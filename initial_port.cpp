@@ -1,5 +1,8 @@
 //===========================================================================
 // DO NOT TOUCH THIS CODE - THIS IS THE REFERENCE IMPLEMENTATION FOR TESTING
+// from git commit:
+//   Date : 3 days ago(03.04.2022 10:07 : 42)
+//   Commit hash : 1759417e841296c600a5c9057fefd13a93a36a3e
 //===========================================================================
 
 #include <cassert>
