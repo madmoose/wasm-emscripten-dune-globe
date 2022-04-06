@@ -25,10 +25,10 @@ std::array<uint8_t, FRAMEBUFFER_WIDTH* FRAMEBUFFER_HEIGHT> framebuffer;
 int          frame = 0;
 
 struct rotation_lookup_table_entry_t {
-	uint16_t unk0;
-	uint16_t unk1;
-	uint16_t fp_hi;
-	uint16_t fp_lo;
+	int16_t unk0;
+	int16_t unk1;
+	int16_t fp_hi;
+	int16_t fp_lo;
 };
 static_assert(sizeof(rotation_lookup_table_entry_t) == 8, "wrong size");
 
@@ -165,7 +165,7 @@ void draw_pixel(uint8_t* screen, uint32_t offset, uint8_t red, uint8_t green, ui
 constexpr int MAGIC_200 = 200;  // FRAMEBUFFER_HEIGHT?
 
 void draw_globe(uint8_t *framebuffer) {
-	const uint8_t  *globdata = GLOBDATA_BIN;
+	const int8_t  *globdata = reinterpret_cast<const int8_t*>(GLOBDATA_BIN);
 	const uint8_t  *map      = MAP_BIN;
 
 	int cs_1CA6 = 1;    // offset into globdata
@@ -196,7 +196,7 @@ void draw_globe(uint8_t *framebuffer) {
 			cs_1CB2 = globe_center_xy_offset;
 			cs_1CAE = globe_center_xy_offset - 1;
 
-			di = 1 - int8_t(globdata[0]);
+			di = 1 - globdata[0];
 			gd_val = globdata[di++];
 		}
 
@@ -209,29 +209,29 @@ void draw_globe(uint8_t *framebuffer) {
 
 			struct result_t
 			{
-				uint16_t gd{};
-				uint16_t grlt_0{};
-				uint16_t grlt_1{};
-				uint16_t grlt_2{};
+				int gd{};
+				int grlt_0{};
+				int grlt_1{};
+				int grlt_2{};
 			};
 
-			auto func1 = [](const uint8_t* globdata_, const globe_rotation_lookup_table_t& rotation_lookup_table, const int16_t ofs1, const int base_ofs) {
+			auto func1 = [](const int8_t* globdata_, const globe_rotation_lookup_table_t& rotation_lookup_table, const int16_t ofs1, const int base_ofs) {
 				const int8_t lo_ofs1 = lo(ofs1);
 
 				const int offset1 = ( lo_ofs1 < 0 ) ? -lo_ofs1 : lo_ofs1;
-				const uint8_t* sub_globdata = &globdata_[base_ofs + offset1];
+				const int8_t* sub_globdata = &globdata_[base_ofs + offset1];
 
 				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4*uint16_t
-				const auto& entry = globe_rotation_lookup_table[int(sub_globdata[0]) / 2];
+				const auto& entry = globe_rotation_lookup_table[sub_globdata[0] / 2];
 
 				// hi & lo < 0?
-				const uint16_t grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
-				const uint16_t grlt_2 = entry.fp_hi;
+				const int grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
+				const int grlt_2 = entry.fp_hi;
 
-				const int8_t index_from_gd = sub_globdata[MAGIC_200 / 2];
-				const uint16_t gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd : index_from_gd;
+				const int index_from_gd = sub_globdata[MAGIC_200 / 2];
+				const int gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd : index_from_gd;
 
-				const uint16_t grlt_1 = entry.unk1 * 2;
+				const int grlt_1 = entry.unk1 * 2;
 				
 				return result_t{gd, grlt_0, grlt_1, grlt_2 };
 			};
