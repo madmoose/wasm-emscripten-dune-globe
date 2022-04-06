@@ -185,7 +185,6 @@ void draw_globe(uint8_t *framebuffer) {
 
 		if (gd_val < 0) {
 			drawing_southern_hemisphere = true;
-			di = 1;
 
 			cs_1CB4 = -cs_1CB4;
 			if (cs_1CB4 < 0) {
@@ -197,6 +196,7 @@ void draw_globe(uint8_t *framebuffer) {
 			cs_1CB2 = globe_center_xy_offset;
 			cs_1CAE = globe_center_xy_offset - 1;
 
+			di = 1;
 			gd_val = globdata[di - 1];
 			di -= gd_val;
 			gd_val = globdata[di++];
@@ -226,18 +226,16 @@ void draw_globe(uint8_t *framebuffer) {
 				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4*uint16_t
 				const uint16_t index = sub_globdata[0] / 2;
 
-				// 3 results from globe_rotation_lookup_table
 				const auto& entry = globe_rotation_lookup_table[index];
-				uint16_t grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
-				uint16_t grlt_1 = entry.unk1;
-				uint16_t grlt_2 = entry.fp_hi;
 
-				// 1 result
+				const uint16_t grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
+				const uint16_t grlt_2 = entry.fp_hi;
+
 				const uint16_t index_from_gd = sub_globdata[MAGIC_200 / 2];
-				const uint16_t gd = (lo_ofs1 < 0) ? grlt_1 - index_from_gd : index_from_gd;
+				const uint16_t gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd : index_from_gd;
 
-				grlt_1 *= 2;
-
+				const uint16_t grlt_1 = entry.unk1 * 2;
+				
 				return result_t{gd, grlt_0, grlt_1, grlt_2 };
 			};
 
