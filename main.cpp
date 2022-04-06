@@ -32,7 +32,7 @@ struct rotation_lookup_table_entry_t {
 };
 static_assert(sizeof(rotation_lookup_table_entry_t) == 8, "wrong size");
 
-constexpr uint16_t MAX_TILT = 98; // 200/2 - 2?
+constexpr int MAX_TILT = 98; // 200/2 - 2?
 using globe_rotation_lookup_table_t = std::array<rotation_lookup_table_entry_t, MAX_TILT+1>; // MAX_TILT related see precalculate_globe_rotation_lookup_table
 globe_rotation_lookup_table_t globe_rotation_lookup_table;
 std::array<uint16_t, MAX_TILT*2> globe_tilt_lookup_table;
