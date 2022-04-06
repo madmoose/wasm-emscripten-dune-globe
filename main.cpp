@@ -30,8 +30,9 @@ struct rotation_lookup_table_entry_t {
 	uint16_t fp_hi;
 	uint16_t fp_lo;
 };
+static_assert(sizeof(rotation_lookup_table_entry_t) == 8, "wrong size");
 
-const uint16_t MAX_TILT = 98;
+constexpr uint16_t MAX_TILT = 98;
 using globe_rotation_lookup_table_t = std::array<rotation_lookup_table_entry_t, MAX_TILT+1>; // MAX_TILT related see precalculate_globe_rotation_lookup_table
 globe_rotation_lookup_table_t globe_rotation_lookup_table;
 std::array<uint16_t, 196> globe_tilt_lookup_table;  // MAX_TILT * 2 ?
@@ -229,7 +230,7 @@ void draw_globe(uint8_t *framebuffer) {
 				// 1 result
 				uint16_t gd = sub_globdata[200/2];
 
-				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4 bytes
+				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4*uint16_t
 				const uint16_t index = sub_globdata[0] / 2;
 				// 3 results from globe_rotation_lookup_table
 
@@ -306,16 +307,18 @@ void draw_globe(uint8_t *framebuffer) {
 }
 
 void init_globe_rotation_lookup_table() {
+	const rotation_lookup_table_entry_t* tablat_entries = reinterpret_cast<const rotation_lookup_table_entry_t*>(&TABLAT_BIN);
+
 	for (int i = 0; i != globe_rotation_lookup_table.size(); i++) {
-		const int offset = i * 8;
-
-		const uint8_t* org_entry = &TABLAT_BIN[8 * i];
-
+		
+		const auto& tablat_entry = tablat_entries[i];
 		auto& table_entry = globe_rotation_lookup_table[i];
-		table_entry.unk0 = read_uint16_le(&org_entry[0]);
-		table_entry.unk1 = read_uint16_le(&org_entry[2]);
-		table_entry.fp_hi = read_uint16_le(&org_entry[4]);
-		table_entry.fp_lo = read_uint16_le(&org_entry[6]);
+
+		// beware of big-endian systems here
+		table_entry.unk0 = tablat_entry.unk0;
+		table_entry.unk1 = tablat_entry.unk1;
+		table_entry.fp_hi = tablat_entry.fp_hi;
+		table_entry.fp_lo = tablat_entry.fp_lo;
 	}
 }
 
