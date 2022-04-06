@@ -196,9 +196,7 @@ void draw_globe(uint8_t *framebuffer) {
 			cs_1CB2 = globe_center_xy_offset;
 			cs_1CAE = globe_center_xy_offset - 1;
 
-			di = 1;
-			gd_val = globdata[di - 1];
-			di -= gd_val;
+			di = 1 - int8_t(globdata[0]);
 			gd_val = globdata[di++];
 		}
 
@@ -267,16 +265,16 @@ void draw_globe(uint8_t *framebuffer) {
 			const uint16_t some_value = globe_tilt_lookup_table[MAX_TILT + gd_val];
 			const result_t res = func1(globdata, globe_rotation_lookup_table, some_value, si);
 
-			constexpr uint16_t MAGIC_OFS1 = 0x62FC;
+			constexpr int MAGIC_OFS1 = 0x62FC;
 			const uint8_t* sub_map = &map[MAGIC_OFS1];
 
-			const int16_t ofs1 = some_offset(
+			const int ofs1 = some_offset(
 				res.grlt_2 - res.gd,
 				res.grlt_1,
 				res.grlt_0);
 			framebuffer[cs_1CAE--] = pixel_color(sub_map[ofs1]);
 
-			const int16_t ofs2 = some_offset(
+			const int ofs2 = some_offset(
 				res.grlt_2 + res.gd - res.grlt_1,
 				res.grlt_1,
 				res.grlt_0);
