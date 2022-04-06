@@ -38,6 +38,28 @@ int16_t uint16_as_int16(uint16_t u) {
 	return u < INT16_MAX ? u : u - UINT16_MAX - 1;
 }
 
+inline 
+uint16_t hi(uint32_t value_)
+{
+	return (value_ >> 16) & 0xffff;
+}
+
+inline
+uint16_t lo(uint32_t value_)
+{
+	return (value_ >> 0) & 0xffff;
+}
+
+#pragma pack(push,1)
+struct rotation_lookup_table_entry_t
+{
+	uint16_t unk0;
+	uint16_t unk1;
+	uint16_t fp_hi;
+	uint16_t fp_lo;
+};
+#pragma pack(pop)
+
 /*
  *  globe_rotation is value from 0x0000 - 0xffff.
  *  Think of it as the fractional part of a 16.16 fixed point number.
@@ -50,8 +72,14 @@ void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
 	// Floor the 16.16 fp value
 	dxax &= ~0xffff;
 
-	globe_rotation_lookup_table[2] = (dxax >> 16) & 0xffff;
-	globe_rotation_lookup_table[3] = (dxax >>  0) & 0xffff;
+	rotation_lookup_table_entry_t* entries = reinterpret_cast<rotation_lookup_table_entry_t*>(globe_rotation_lookup_table.data());
+
+	auto& first = entries[0];
+
+	assert(first.unk0 == 0);
+	assert(first.unk1 != 0);
+	first.fp_hi = hi(dxax);
+	first.fp_lo = lo(dxax);
 
 	// Add 0.5 in 16.16 fixed point
 	dxax += 0x8000;
@@ -60,16 +88,16 @@ void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
 	uint16_t bx = dxax / MAGIC_VALUE;
 
 	for (int i = 1; i != MAX_TILT+1; ++i) {
-		const int offset = i * 4;
-		uint32_t dxax = 2 * uint32_t(bx) * uint32_t(globe_rotation_lookup_table[offset + 1]);
-		globe_rotation_lookup_table[offset + 2] = (dxax >> 16) & 0xffff;
-		globe_rotation_lookup_table[offset + 3] = (dxax >>  0) & 0xffff;
+		auto& entry = entries[i];
+
+		assert(entry.unk0 != 0); // meaning?
+		uint32_t dxax = 2 * uint32_t(bx) * uint32_t(entry.unk1);
+		entry.fp_hi = hi(dxax);
+		entry.fp_lo = lo(dxax);
 	}
 }
 
 void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
-	int i = 0;
-
 	// with C++17
 	//globe_tilt = std::clamp(globe_tilt, -MAX_TILT, MAX_TILT);
 	if (globe_tilt < -MAX_TILT) {
@@ -78,6 +106,8 @@ void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
 	if (globe_tilt > MAX_TILT) {
 		globe_tilt = MAX_TILT;
 	}
+
+	int i = 0;
 
 	// For stage 1, count down from globe_tilt-(MAX_TILT+1) to -MAX_TILT
 	if (globe_tilt > 0) {
@@ -137,11 +167,10 @@ void draw_globe(uint8_t *framebuffer) {
 	const uint8_t  *globdata = GLOBDATA_BIN;
 	const uint8_t  *map      = MAP_BIN;
 
-	uint16_t cs_1CA8 = 1;    // offset into globdata
-	uint16_t cs_1CA6 = 1;    // offset into globdata
-	uint16_t cs_1CAA = 3290; // offset into globdata
-	uint16_t cs_1CAC = MAX_TILT;   // offset into globe_tilt_lookup_table
+	rotation_lookup_table_entry_t* rotation_lookup_table 
+		= reinterpret_cast<rotation_lookup_table_entry_t*>(globe_rotation_lookup_table.data());
 
+	uint16_t cs_1CA6 = 1;    // offset into globdata
 	uint16_t cs_1CB4 = -FRAMEBUFFER_WIDTH; // screen width
 
 	const uint16_t globe_center_xy_offset1 = frame_buffer_offset(160, 79);
@@ -158,7 +187,7 @@ void draw_globe(uint8_t *framebuffer) {
 
 		if (uint8_as_int8(ax & 0xff) < 0) {
 			drawing_southern_hemisphere = true;
-			di = cs_1CA8;
+			di = 1;
 
 			cs_1CB4 = -cs_1CB4;
 			if (uint16_as_int16(cs_1CB4) < 0) {
@@ -175,7 +204,7 @@ void draw_globe(uint8_t *framebuffer) {
 			ax = globdata[di++];
 		}
 
-		uint16_t si = cs_1CAA; // offset into globdata
+		uint16_t si = 3290; // offset into globdata
 
 		do {
 			if (drawing_southern_hemisphere) {
@@ -183,17 +212,17 @@ void draw_globe(uint8_t *framebuffer) {
 			}
 
 			uint16_t ax_ = ax; // not in use???
-			ax = globe_tilt_lookup_table[cs_1CAC + uint8_as_int8(ax & 0xff)];
+			ax = globe_tilt_lookup_table[MAX_TILT + uint8_as_int8(ax & 0xff)];
 
 			struct result_t
 			{
-				uint16_t gd{}; // ax
-				uint16_t grlt_0{}; // bx
-				uint16_t grlt_1{}; // cx
-				uint16_t grlt_2{}; // dx
+				uint16_t gd{};
+				uint16_t grlt_0{};
+				uint16_t grlt_1{};
+				uint16_t grlt_2{};
 			};
 
-			auto func1 = [](const uint8_t* globdata_, uint16_t ofs1/*ax*/, uint16_t base_ofs/*si*/)
+			auto func1 = [](const uint8_t* globdata_, rotation_lookup_table_entry_t* rotation_lookup_table, uint16_t ofs1/*ax*/, uint16_t base_ofs/*si*/)
 			{
 				const bool neg_bx = uint16_as_int16(ofs1) < 0;
 				
@@ -203,15 +232,18 @@ void draw_globe(uint8_t *framebuffer) {
 					offset1 = -offset1;
 				}
 
-				result_t result;
-
+				const uint8_t* sub_globdata = &globdata_[base_ofs + offset1];
 				// 1 result
-				uint16_t gd = globdata_[base_ofs + offset1 + 100];
-				const uint16_t offset2 = globdata_[base_ofs + offset1] * 2;
+				uint16_t gd = sub_globdata[200/2];
+
+				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4 bytes
+				const uint16_t index = sub_globdata[0] / 2;
 				// 3 results from globe_rotation_lookup_table
-				uint16_t grlt_0 = globe_rotation_lookup_table[offset2 + 0]; // bx
-				uint16_t grlt_1 = globe_rotation_lookup_table[offset2 + 1]; // cx
-				uint16_t grlt_2 = globe_rotation_lookup_table[offset2 + 2]; // dx
+				const auto& entry = rotation_lookup_table[index];
+
+				uint16_t grlt_0 = entry.unk0;
+				uint16_t grlt_1 = entry.unk1;
+				uint16_t grlt_2 = entry.fp_hi;
 
 				if (neg_ax) {
 					gd = grlt_1 - gd;
@@ -255,7 +287,7 @@ void draw_globe(uint8_t *framebuffer) {
 			constexpr uint16_t MAGIC_OFS1 = 0x62FC;
 			const uint8_t* sub_map = &map[MAGIC_OFS1];
 
-			const result_t res = func1(globdata, ax, si);
+			const result_t res = func1(globdata, rotation_lookup_table, ax, si);
 
 			const int16_t ofs1 = uint16_as_int16(some_offset(
 				res.grlt_2 - res.gd,
