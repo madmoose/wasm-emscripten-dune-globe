@@ -209,10 +209,10 @@ void draw_globe(uint8_t *framebuffer) {
 
 			struct result_t
 			{
-				uint16_t gd{};
-				uint16_t grlt_0{};
-				uint16_t grlt_1{};
-				uint16_t grlt_2{};
+				int16_t gd{};
+				int grlt_0{};
+				int grlt_1{};
+				int grlt_2{};
 			};
 
 			auto func1 = [](const uint8_t* globdata_, const globe_rotation_lookup_table_t& rotation_lookup_table, const int16_t ofs1, const int base_ofs) {
@@ -225,18 +225,18 @@ void draw_globe(uint8_t *framebuffer) {
 				const auto& entry = globe_rotation_lookup_table[int(sub_globdata[0]) / 2];
 
 				// hi & lo < 0?
-				const uint16_t grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
-				const uint16_t grlt_2 = entry.fp_hi;
+				const int grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
+				const int grlt_2 = entry.fp_hi;
 
 				const int index_from_gd = sub_globdata[MAGIC_200 / 2];
-				const uint16_t gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd : index_from_gd;
+				const int16_t gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd : index_from_gd;
 
-				const uint16_t grlt_1 = entry.unk1 * 2;
+				const int grlt_1 = entry.unk1 * 2;
 				
 				return result_t{gd, grlt_0, grlt_1, grlt_2 };
 			};
 
-			auto some_offset = [](int16_t value, int16_t adjust1, int16_t adjust2) {
+			auto some_offset = [](int value, int adjust1, int adjust2) {
 				if (value < 0) {
 					value += adjust1;
 				}
