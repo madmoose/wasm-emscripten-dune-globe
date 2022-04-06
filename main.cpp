@@ -24,8 +24,7 @@ SDL_Surface *screen = NULL;
 std::array<uint8_t, FRAMEBUFFER_WIDTH* FRAMEBUFFER_HEIGHT> framebuffer;
 int          frame = 0;
 
-struct rotation_lookup_table_entry_t
-{
+struct rotation_lookup_table_entry_t {
 	uint16_t unk0;
 	uint16_t unk1;
 	uint16_t fp_hi;
@@ -47,15 +46,13 @@ int16_t uint16_as_int16(uint16_t u) {
 }
 
 inline
-uint16_t hi(uint32_t value_)
-{
-	return (value_ >> 16) & 0xffff;
+uint16_t hi(uint32_t v) {
+	return (v >> 16) & 0xffff;
 }
 
 inline
-uint16_t lo(uint32_t value_)
-{
-	return (value_ >> 0) & 0xffff;
+uint16_t lo(uint32_t v) {
+	return (v >> 0) & 0xffff;
 }
 
 uint16_t read_uint16_le(uint8_t *p) {
@@ -150,14 +147,12 @@ void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
 }
 
 inline
-uint16_t frame_buffer_offset(int x, int y)
-{
-  return y * FRAMEBUFFER_WIDTH + x;
+uint16_t frame_buffer_offset(int x, int y) {
+	return y * FRAMEBUFFER_WIDTH + x;
 }
 
 inline
-void draw_pixel(uint8_t* screen, uint32_t offset, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
-{
+void draw_pixel(uint8_t* screen, uint32_t offset, uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha) {
 	screen[offset + 0] = red;
 	screen[offset + 1] = green;
 	screen[offset + 2] = blue;
@@ -220,8 +215,7 @@ void draw_globe(uint8_t *framebuffer) {
 				uint16_t grlt_2{};
 			};
 
-			auto func1 = [](const uint8_t* globdata_, const std::array<rotation_lookup_table_entry_t, 99> &rotation_lookup_table, uint16_t ofs1/*ax*/, uint16_t base_ofs/*si*/)
-			{
+			auto func1 = [](const uint8_t* globdata_, const std::array<rotation_lookup_table_entry_t, 99> &rotation_lookup_table, uint16_t ofs1/*ax*/, uint16_t base_ofs/*si*/) {
 				const bool neg_bx = uint16_as_int16(ofs1) < 0;
 
 				uint16_t offset1 = uint8_as_int8(ofs1 & 0xff);
@@ -256,8 +250,7 @@ void draw_globe(uint8_t *framebuffer) {
 				return result_t{gd, grlt_0, grlt_1, grlt_2 };
 			};
 
-			auto some_offset = [](uint16_t value, uint16_t adjust1, uint16_t adjust2)
-			{
+			auto some_offset = [](uint16_t value, uint16_t adjust1, uint16_t adjust2) {
 				if (uint16_as_int16(value) < 0) {
 					value += adjust1;
 				}
@@ -265,8 +258,7 @@ void draw_globe(uint8_t *framebuffer) {
 				return value;
 			};
 
-			auto pixel_color = [](uint16_t value)
-			{
+			auto pixel_color = [](uint16_t value) {
 				//base color?
 				uint8_t color = value & 0x0f;
 
@@ -361,10 +353,8 @@ void draw_frame(void *draw_params) {
 #if 1
 		unsigned x = i / FRAMEBUFFER_WIDTH;
 		unsigned y = i % FRAMEBUFFER_WIDTH;
-		for (unsigned w = 0; w < resolution_factor; ++w)
-		{
-			for (unsigned h = 0; h < resolution_factor; ++h)
-			{
+		for (unsigned w = 0; w < resolution_factor; ++w) {
+			for (unsigned h = 0; h < resolution_factor; ++h) {
 				const unsigned pixel_offset = ((x * resolution_factor + w)
 					                           * (FRAMEBUFFER_WIDTH * resolution_factor)
 					                           + (y * resolution_factor + h)) * 4;
@@ -382,18 +372,15 @@ void draw_frame(void *draw_params) {
 	SDL_Flip(screen);
 }
 
-struct pos_t
-{
+struct pos_t {
 	int16_t tilt{};
 	int16_t rotation{};
 };
 
-struct animated_t
-{
+struct animated_t {
 	int frame{0};
 
-	pos_t next()
-	{
+	pos_t next() {
 		float f = sinf(frame / 200.0);
 		int16_t tilt = -MAX_TILT * f;
 		int16_t rotation = 150 * frame;
@@ -435,58 +422,43 @@ int main() {
 		constexpr int16_t ROTATION_STEP = 100;
 
 		//continuous-response keys
-		if (keystate[SDLK_LEFT])
-		{
+		if (keystate[SDLK_LEFT]) {
 			cursor_based.rotation += ROTATION_STEP;
 		}
-		if (keystate[SDLK_RIGHT])
-		{
+		if (keystate[SDLK_RIGHT]) {
 			cursor_based.rotation -= ROTATION_STEP;
 		}
-		if (keystate[SDLK_UP])
-		{
-			if (cursor_based.tilt < MAX_TILT - 1)
-			{
-				++cursor_based.tilt;
-			}
+		if (keystate[SDLK_UP] && cursor_based.tilt < MAX_TILT - 1){
+			++cursor_based.tilt;
 		}
-		if (keystate[SDLK_DOWN])
-		{
-			if (cursor_based.tilt > -MAX_TILT - 1)
-			{
-				--cursor_based.tilt;
-			}
+		if (keystate[SDLK_DOWN] && cursor_based.tilt > -MAX_TILT - 1) {
+			--cursor_based.tilt;
 		}
 
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {  // poll until all events are handled!
-			if (event.type == SDL_QUIT)
-			{
+			if (event.type == SDL_QUIT) {
 				run = false;
 				break;
 			}
-			if (event.type == SDL_KEYDOWN)
-			{
+			if (event.type == SDL_KEYDOWN) {
 				//Set the proper message surface
-				switch (event.key.keysym.sym)
-				{
-				case SDLK_a:
-					is_animated = !is_animated;
-					break;
+				switch (event.key.keysym.sym) {
+					case SDLK_a:
+						is_animated = !is_animated;
+						break;
 				}
 			}
 		}
 
-		if (is_animated)
-		{
+		if (is_animated) {
 			cursor_based = animated.next();
-		}
-		else
-		{
+		} else {
 			animated.frame = cursor_based.rotation / 150;
 		}
+
 		draw_frame(&draw_params_t{
-			.tilt = cursor_based.tilt,
+			.tilt     = cursor_based.tilt,
 			.rotation = cursor_based.rotation,
 		});
 
