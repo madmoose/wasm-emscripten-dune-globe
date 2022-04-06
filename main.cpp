@@ -97,15 +97,21 @@ void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
 	}
 }
 
+inline 
+uint16_t clamp(int16_t value, int16_t min, int16_t max)
+{
+	// with C++17: std::clamp
+	if (value < min) {
+		return min;
+	}
+	if (value > max) {
+		return max;
+	}
+	return value;
+}
+
 void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
-	// with C++17
-	//globe_tilt = std::clamp(globe_tilt, -MAX_TILT, MAX_TILT);
-	if (globe_tilt < -MAX_TILT) {
-		globe_tilt = -MAX_TILT;
-	}
-	if (globe_tilt > MAX_TILT) {
-		globe_tilt = MAX_TILT;
-	}
+	globe_tilt = clamp(globe_tilt, -MAX_TILT, MAX_TILT);
 
 	int i = 0;
 
@@ -294,7 +300,7 @@ void draw_globe(uint8_t *framebuffer) {
 				res.grlt_0));
 			framebuffer[cs_1CB0++] = pixel_color(sub_map[ofs2]);
 
-			si += 200; // FRAMEBUFFER_WIDTH?
+			si += 200; // FRAMEBUFFER_HEIGHT?
 			ax = globdata[di++];
 			// al = ax & 0x00ff;
 		} while (uint8_as_int8(ax) >= 0);
@@ -330,6 +336,20 @@ struct draw_params_t {
 	uint16_t rotation;
 };
 
+struct rgb_t
+{
+	uint8_t r{};
+	uint8_t g{};
+	uint8_t b{};
+};
+
+inline
+std::array<uint8_t, 3> pal_color(int color_index)
+{
+	const uint8_t* triple = &PAL_BIN[color_index * 3];
+	return { triple[0], triple[1], triple[2] };
+}
+
 void draw_frame(void *draw_params) {
 	if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
 
@@ -346,18 +366,16 @@ void draw_frame(void *draw_params) {
 	draw_globe(framebuffer.data());
 
 	uint8_t *screenbuffer = (uint8_t*)screen->pixels;
+
 	for (int i = 0; i != framebuffer.size(); ++i) {
-		int c = framebuffer[i];
-		unsigned c_offset = 3 * c;
+		int color_index = framebuffer[i];
+
+		const auto color = pal_color(color_index);
 
 #ifdef _WIN32
-		unsigned char r = PAL_BIN[c_offset + 2];
-		unsigned char g = PAL_BIN[c_offset + 1];
-		unsigned char b = PAL_BIN[c_offset + 0];
+		const rgb_t rgb{ color[2], color[1], color[0]};
 #else
-		unsigned char r = PAL_BIN[c_offset + 0];
-		unsigned char g = PAL_BIN[c_offset + 1];
-		unsigned char b = PAL_BIN[c_offset + 2];
+		const rgb_t rgb{ color[0], color[1], color[2] };
 #endif
 
 #if 1
@@ -368,12 +386,12 @@ void draw_frame(void *draw_params) {
 				const unsigned pixel_offset = ((x * resolution_factor + w)
 					                           * (FRAMEBUFFER_WIDTH * resolution_factor)
 					                           + (y * resolution_factor + h)) * 4;
-				draw_pixel(screenbuffer, pixel_offset, r, g, b, 255);
+				draw_pixel(screenbuffer, pixel_offset, rgb.r, rgb.g, rgb.b, 255);
 			}
 		}
 #else
 		const unsigned pixel_offset = 4 * i;
-        draw_pixel(screenbuffer, pixel_offset, red, g, b, 255);
+        draw_pixel(screenbuffer, pixel_offset, rgb.r, rgb.g, rgb.b, 255);
 #endif
 	}
 
