@@ -228,7 +228,7 @@ void draw_globe(uint8_t *framebuffer) {
 				const uint16_t grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
 				const uint16_t grlt_2 = entry.fp_hi;
 
-				const int8_t index_from_gd = sub_globdata[MAGIC_200 / 2];
+				const int index_from_gd = sub_globdata[MAGIC_200 / 2];
 				const uint16_t gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd : index_from_gd;
 
 				const uint16_t grlt_1 = entry.unk1 * 2;
