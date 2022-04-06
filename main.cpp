@@ -57,11 +57,6 @@ uint16_t lo(uint32_t v) {
 	return (v >> 0) & 0xffff;
 }
 
-uint16_t read_uint16_le(const uint8_t *p) {
-	return (p[0] << 0)
-		| (p[1] << 8);
-}
-
 /*
  *  globe_rotation is value from 0x0000 - 0xffff.
  *  Think of it as the fractional part of a 16.16 fixed point number.
@@ -353,8 +348,9 @@ std::array<uint8_t, 3> pal_color(int color_index)
 void draw_frame(void *draw_params) {
 	if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
 
-	int16_t  tilt     = ((draw_params_t *)draw_params)->tilt;
-	uint16_t rotation = ((draw_params_t *)draw_params)->rotation;
+	auto* dp = reinterpret_cast<draw_params_t*>(draw_params);
+	int16_t  tilt     = dp->tilt;
+	uint16_t rotation = dp->rotation;
 
 #if ALWAYS_INIT()
 	init_globe_rotation_lookup_table();
