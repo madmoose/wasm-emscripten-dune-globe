@@ -35,7 +35,7 @@ static_assert(sizeof(rotation_lookup_table_entry_t) == 8, "wrong size");
 constexpr uint16_t MAX_TILT = 98;
 using globe_rotation_lookup_table_t = std::array<rotation_lookup_table_entry_t, MAX_TILT+1>; // MAX_TILT related see precalculate_globe_rotation_lookup_table
 globe_rotation_lookup_table_t globe_rotation_lookup_table;
-std::array<uint16_t, 196> globe_tilt_lookup_table;  // MAX_TILT * 2 ?
+std::array<uint16_t, MAX_TILT*2> globe_tilt_lookup_table;
 
 inline
 uint16_t hi(uint32_t v) {
@@ -62,7 +62,7 @@ int8_t lo(int16_t v) {
  *  Think of it as the fractional part of a 16.16 fixed point number.
  */
 void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
-	constexpr uint32_t MAGIC_VALUE = 398;
+	constexpr uint32_t MAGIC_VALUE = 398; // (100-1)*4?
 
 	uint32_t dxax = MAGIC_VALUE * globe_rotation;
 
@@ -280,13 +280,12 @@ void draw_globe(uint8_t *framebuffer) {
 				return color;
 			};
 
+			// hi,lo int8 values?
+			const uint16_t some_value = globe_tilt_lookup_table[MAX_TILT + gd_val];
+			const result_t res = func1(globdata, globe_rotation_lookup_table, some_value, si);
+
 			constexpr uint16_t MAGIC_OFS1 = 0x62FC;
 			const uint8_t* sub_map = &map[MAGIC_OFS1];
-
-			// hi,lo int8 values?
-			uint16_t ax = globe_tilt_lookup_table[MAX_TILT + gd_val];
-
-			const result_t res = func1(globdata, globe_rotation_lookup_table, ax, si);
 
 			const int16_t ofs1 = some_offset(
 				res.grlt_2 - res.gd,
