@@ -348,6 +348,8 @@ namespace initial_port
 	void draw_frame(int16_t tilt, int16_t rotation, uint8_t* framebuffer);
 }
 
+std::array<uint8_t, FRAMEBUFFER_WIDTH* FRAMEBUFFER_HEIGHT> test_framebuffer{};
+
 void draw_frame(void *draw_params) {
 	if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
 
@@ -365,10 +367,10 @@ void draw_frame(void *draw_params) {
 	draw_globe(framebuffer.data());
 
 #if COMPARE_WITH_INITAL_CODE()
-	std::array<uint8_t, FRAMEBUFFER_WIDTH* FRAMEBUFFER_HEIGHT> test_framebuffer{};
 	initial_port::draw_frame(tilt, rotation, test_framebuffer.data());
 	if (framebuffer != test_framebuffer)
 	{
+		assert(false);
 		throw 0xdeadbeef;
 	}
 #endif
