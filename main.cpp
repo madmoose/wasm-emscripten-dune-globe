@@ -56,9 +56,9 @@ uint16_t lo(uint32_t v) {
 	return (v >> 0) & 0xffff;
 }
 
-uint16_t read_uint16_le(uint8_t *p) {
+uint16_t read_uint16_le(const uint8_t *p) {
 	return (p[0] << 0)
-		| (p[1] << 16);
+		| (p[1] << 8);
 }
 
 /*
@@ -309,22 +309,13 @@ void init_globe_rotation_lookup_table() {
 	for (int i = 0; i != globe_rotation_lookup_table.size(); i++) {
 		const int offset = i * 8;
 
-#if 0 // that works for me
-		const uint16_t unk0 = *(uint16_t*)&TABLAT_BIN[offset + 0];
-		const uint16_t unk1 = *(uint16_t*)&TABLAT_BIN[offset + 2];
-		const uint16_t fp_hi = *(uint16_t*)&TABLAT_BIN[offset + 4];
-		const uint16_t fp_lo = *(uint16_t*)&TABLAT_BIN[offset + 6];
-#else
-		const uint16_t unk0 = read_uint16_le(&TABLAT_BIN[8 * i + 0]);
-		const uint16_t unk1 = read_uint16_le(&TABLAT_BIN[8 * i + 2]);
-		const uint16_t fp_hi = read_uint16_le(&TABLAT_BIN[8 * i + 4]);
-		const uint16_t fp_lo = read_uint16_le(&TABLAT_BIN[8 * i + 6]);
-#endif
+		const uint8_t* org_entry = &TABLAT_BIN[8 * i];
 
-		globe_rotation_lookup_table[i].unk0 = unk0;
-		globe_rotation_lookup_table[i].unk1 = unk1;
-		globe_rotation_lookup_table[i].fp_hi = unk1;
-		globe_rotation_lookup_table[i].fp_lo = unk1;
+		auto& table_entry = globe_rotation_lookup_table[i];
+		table_entry.unk0 = read_uint16_le(&org_entry[0]);
+		table_entry.unk1 = read_uint16_le(&org_entry[2]);
+		table_entry.fp_hi = read_uint16_le(&org_entry[4]);
+		table_entry.fp_lo = read_uint16_le(&org_entry[6]);
 	}
 }
 
