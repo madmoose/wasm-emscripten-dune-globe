@@ -217,36 +217,28 @@ void draw_globe(uint8_t *framebuffer) {
 				uint16_t grlt_2{};
 			};
 
-			auto func1 = [](const uint8_t* globdata_, const globe_rotation_lookup_table_t& rotation_lookup_table, int16_t ofs1, int16_t base_ofs) {
-				const bool neg_bx = ofs1 < 0; // hi(ofs1) < 0 && lo(ofs1)
+			auto func1 = [](const uint8_t* globdata_, const globe_rotation_lookup_table_t& rotation_lookup_table, const int16_t ofs1, const int16_t base_ofs) {
+				const int8_t lo_ofs1 = lo(ofs1);
 
-				// hi(ofs1) is execept the <0 check above not used after precalculate_globe_tilt_lookup_table
-
-				int8_t offset1 = lo(ofs1);
-				const bool neg_ax = offset1 < 0;
-
-				if (neg_ax) {
-					offset1 = -offset1;
-				}
-
+				const int8_t offset1 = lo_ofs1 < 0 ? -lo_ofs1 : lo_ofs1;
 				const uint8_t* sub_globdata = &globdata_[base_ofs + offset1];
-				// 1 result
-				uint16_t gd = sub_globdata[MAGIC_200 /2];
 
 				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4*uint16_t
 				const uint16_t index = sub_globdata[0] / 2;
+
 				// 3 results from globe_rotation_lookup_table
-
 				const auto& entry = globe_rotation_lookup_table[index];
-
 				uint16_t grlt_0 = entry.unk0;
 				uint16_t grlt_1 = entry.unk1;
 				uint16_t grlt_2 = entry.fp_hi;
 
-				if (neg_ax) {
+				// 1 result
+				uint16_t gd = sub_globdata[MAGIC_200 / 2];
+				if (lo_ofs1 < 0) {
 					gd = grlt_1 - gd;
 				}
-				if (neg_bx)
+
+				if (ofs1 < 0) // hi(ofs1) < 0 && lo(ofs1) < 0
 				{
 					grlt_0 = -grlt_0;
 				}
