@@ -150,7 +150,7 @@ void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
 }
 
 inline
-uint16_t frame_buffer_offset(int x, int y) {
+int frame_buffer_offset(int x, int y) {
 	return y * FRAMEBUFFER_WIDTH + x;
 }
 
