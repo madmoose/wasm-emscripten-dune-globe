@@ -267,10 +267,10 @@ void draw_globe(uint8_t *framebuffer) {
 
 			struct result_t
 			{
-				uint16_t gd{};
+				int16_t gd{};
 				int16_t grlt_0{};
 				uint16_t grlt_1{};
-				uint16_t grlt_2{};
+				uint16_t entry_fp_hi{};
 			};
 
 			auto func1 = [](const uint8_t* globdata_, const globe_rotation_lookup_table_t& rotation_lookup_table, const int16_t ofs1, const int base_ofs) {
@@ -305,19 +305,18 @@ void draw_globe(uint8_t *framebuffer) {
 				//with int16_t
 				assert((grlt_0 >= -25334) && (grlt_0 <= 25334) && ((grlt_0 % 2) == 0));
 
-				const uint16_t grlt_2 = entry.fp_hi;
-
 				const uint8_t index_from_gd2 = sub_globdata[MAGIC_200 / 2];
 				//1,2,3,4,...,97,98,99 -> fits into int8_t
 				assert(index_from_gd2 >= 0 && index_from_gd2 <= 99);
 
 				// (lo_ofs1 < 0) ? entry.unk1(3-199) - index_from_gd2(0..99) : index_from_gd2(0..99)
-				const uint16_t gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd2 : index_from_gd2;
+				const int16_t gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd2 : index_from_gd2;
+				assert((gd >= 0) && (gd <= 195));
 
 				const uint16_t grlt_1 = entry.unk1 * 2;
 				assert((grlt_1 >= 6) && (grlt_1 <= 398) && ((grlt_1 % 2) == 0));
 
-				return result_t{ gd, grlt_0, grlt_1, grlt_2 };
+				return result_t{ gd, grlt_0, grlt_1, entry.fp_hi };
 			};
 
 			auto some_offset = [](int16_t value, int16_t adjust1, int16_t adjust2) {
@@ -346,7 +345,12 @@ void draw_globe(uint8_t *framebuffer) {
 
 			// hi,lo int8 values?
 			const uint16_t some_value = globe_tilt_lookup_table[MAX_TILT + gd_val];
+
 			const result_t res = func1(globdata, globe_rotation_lookup_table, some_value, si);
+			assert((res.gd >= 0) && (res.gd <= 195));
+			assert((res.grlt_0 >= -25334) && (res.grlt_0 <= 25334) && ((res.grlt_0 % 2) == 0));
+			assert((res.grlt_1 >= 6) && (res.grlt_1 <= 398) && ((res.grlt_1 % 2) == 0));
+			assert((res.entry_fp_hi >= 0) && (res.entry_fp_hi <= 397)); // 0,1,2,3,4,...,397
 
 			constexpr int MAGIC_OFS1 = 0x62FC; // middle?
 			const uint8_t* sub_map = &map[MAGIC_OFS1];
@@ -354,7 +358,7 @@ void draw_globe(uint8_t *framebuffer) {
 			// left part of the globe
 			{
 				const int ofs1 = some_offset(
-					res.grlt_2 - res.gd,
+					res.entry_fp_hi - res.gd,
 					res.grlt_1,
 					res.grlt_0);
 
@@ -367,7 +371,7 @@ void draw_globe(uint8_t *framebuffer) {
 			// right part of the globe
 			{
 				const int ofs2 = some_offset(
-					res.grlt_2 + res.gd - res.grlt_1,
+					res.entry_fp_hi + res.gd - res.grlt_1,
 					res.grlt_1,
 					res.grlt_0);
 
