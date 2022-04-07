@@ -180,10 +180,16 @@ void draw_globe(uint8_t *framebuffer) {
 
 	do {
 		int di = cs_1CA6; // offset into globdata
+		assert((di >= 1) && (di <= 2867));
+
+		{
+			const uint8_t globdata_at_di = globdata[di];
+			assert(((globdata_at_di >= 0) && (globdata_at_di <= 86) || globdata_at_di == 255)); // 255(-1) as flag?
+		}
 
 		int8_t gd_val = globdata[di++];
 
-		if (gd_val < 0) {
+		if (gd_val < 0) { // as uint8_t == 255
 			drawing_southern_hemisphere = true;
 
 			cs_1CB4 = -cs_1CB4;
@@ -196,7 +202,12 @@ void draw_globe(uint8_t *framebuffer) {
 			cs_1CB2 = globe_center_xy_offset;
 			cs_1CAE = globe_center_xy_offset - 1;
 
-			di = 1 - int8_t(globdata[0]);
+			assert(globdata[0] == 191); // as int8_t = -65
+
+			di = 1 - int8_t(globdata[0]); // 1 - ( -65 ) = 66
+			assert(di == 66);
+			assert(globdata[di] == 1);
+
 			gd_val = globdata[di++];
 		}
 
@@ -216,24 +227,40 @@ void draw_globe(uint8_t *framebuffer) {
 			};
 
 			auto func1 = [](const uint8_t* globdata_, const globe_rotation_lookup_table_t& rotation_lookup_table, const int16_t ofs1, const int base_ofs) {
+				// 3290,3490,3690,3890,4090,4290,4490,4690,...,14690,14890,15090,15290,15490,15690,15890 
+				assert((base_ofs >= 3290) && (base_ofs <= 16090) && ((base_ofs % 10) == 0));
+
 				const int8_t lo_ofs1 = lo(ofs1);
 
-				const int offset1 = ( lo_ofs1 < 0 ) ? -lo_ofs1 : lo_ofs1;
+				const int offset1 = (lo_ofs1 < 0) ? -lo_ofs1 : lo_ofs1;
+				assert((offset1 >= 0) && (offset1 <= 98)); // 1,2,3,4,5,9,11,19,28,39,51,67,74,86,94,97,98
+
 				const uint8_t* sub_globdata = &globdata_[base_ofs + offset1];
+				//printf("&globdata_[%i + %i] == &globdata_[%u]\n", base_ofs, offset1, sub_globdata - globdata_);
 
 				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4*uint16_t
-				const auto& entry = globe_rotation_lookup_table[int(sub_globdata[0]) / 2];
+				const uint8_t index_from_gd1 = sub_globdata[0];
+				//0,2,4,6,...,190,192,194,196 -> does not fit into int8_t
+				assert((index_from_gd1 >= 0) && (index_from_gd1 <= 196) && ((index_from_gd1 % 2) == 0));
+
+				const auto& entry = globe_rotation_lookup_table[sub_globdata[0] / 2];
 
 				// hi & lo < 0?
 				const uint16_t grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
-				const uint16_t grlt_2 = entry.fp_hi;
+				assert((grlt_0 >= 0) && (grlt_0 <= 65138) && ((grlt_0 % 2) == 0));
 
-				const int index_from_gd = sub_globdata[MAGIC_200 / 2];
-				const uint16_t gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd : index_from_gd;
+				const uint16_t grlt_2 = entry.fp_hi;
+				assert((grlt_2 >= 0) && (grlt_2 <= 397)); // 1,2,3,4,...,397
+
+				const uint8_t index_from_gd2 = sub_globdata[MAGIC_200 / 2];
+				//1,2,3,4,...,97,98,99 -> fits into int8_t
+				assert(index_from_gd2 >= 0 && index_from_gd2 <= 99);
+				const uint16_t gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd2 : index_from_gd2;
 
 				const uint16_t grlt_1 = entry.unk1 * 2;
-				
-				return result_t{gd, grlt_0, grlt_1, grlt_2 };
+				assert((grlt_1 >= 6) && (grlt_1 <= 398) && ((grlt_1 % 2) == 0));
+
+				return result_t{ gd, grlt_0, grlt_1, grlt_2 };
 			};
 
 			auto some_offset = [](int16_t value, int16_t adjust1, int16_t adjust2) {
@@ -264,25 +291,34 @@ void draw_globe(uint8_t *framebuffer) {
 			const uint16_t some_value = globe_tilt_lookup_table[MAX_TILT + gd_val];
 			const result_t res = func1(globdata, globe_rotation_lookup_table, some_value, si);
 
-			constexpr int MAGIC_OFS1 = 0x62FC;
+			constexpr int MAGIC_OFS1 = 0x62FC; // middle?
 			const uint8_t* sub_map = &map[MAGIC_OFS1];
 
 			const int ofs1 = some_offset(
 				res.grlt_2 - res.gd,
 				res.grlt_1,
 				res.grlt_0);
+
+			assert((ofs1 >= -25334) && (ofs1 <= 25339));
+
 			framebuffer[cs_1CAE--] = pixel_color(sub_map[ofs1]);
 
 			const int ofs2 = some_offset(
 				res.grlt_2 + res.gd - res.grlt_1,
 				res.grlt_1,
 				res.grlt_0);
+
+			assert((ofs2 >= -25334) && (ofs2 <= 25339));
+
 			framebuffer[cs_1CB0++] = pixel_color(sub_map[ofs2]);
 
 			si += MAGIC_200;
+
 			gd_val = globdata[di++];
 			// al = ax & 0x00ff;
 		} while (gd_val >= 0);
+
+		assert((di >= 66) && (di <= 2867));
 
 		cs_1CA6 = di;
 		cs_1CB2 += cs_1CB4;
@@ -321,7 +357,7 @@ std::array<uint8_t, 3> pal_color(int color_index)
 	return { triple[0], triple[1], triple[2] };
 }
 
-#define COMPARE_WITH_INITAL_CODE() (false)
+#define COMPARE_WITH_INITAL_CODE() (true)
 
 #if COMPARE_WITH_INITAL_CODE()
 namespace initial_port
@@ -481,7 +517,7 @@ int main() {
 		draw_params_t dp{ cursor_based.tilt , cursor_based.rotation };
 		draw_frame(&dp);
 
-		SDL_Delay(10);
+		//SDL_Delay(10);
 	}
 #endif
 	SDL_Quit();
