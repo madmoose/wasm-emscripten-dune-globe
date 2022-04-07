@@ -3,6 +3,9 @@
 #include <cstdio>
 #include <cmath>
 #include <array>
+#include <string>
+#include <fstream>
+#include <iostream>
 
 #include <SDL/SDL.h>
 #undef main
@@ -164,6 +167,45 @@ void draw_pixel(uint8_t* screen, uint32_t offset, uint8_t red, uint8_t green, ui
 
 constexpr int MAGIC_200 = 200;  // FRAMEBUFFER_HEIGHT?
 
+template<typename ValueType>
+struct biggest_smallest_t
+{
+	ValueType smallest = std::numeric_limits<ValueType>::max();
+	ValueType biggest = std::numeric_limits<ValueType>::min();
+
+	void operator()(ValueType value)
+	{
+		if (value < smallest)
+		{
+			smallest = value;
+			std::cout << "smallest: " << smallest << std::endl;
+		}
+		if (value > biggest)
+		{
+			biggest = value;
+			std::cout << "biggest: " << biggest << std::endl;
+		}
+	}
+};
+
+#define WRITE_OUTPUT() (false)
+
+struct writer_t
+{
+	std::string& output;
+
+	writer_t(std::string& output_) :output(output_)
+	{
+	}
+	~writer_t()
+	{
+		std::ofstream outfile("d:/temp/output.txt", std::ios_base::app);
+		outfile << output;
+	}
+};
+
+std::string output;
+
 void draw_globe(uint8_t *framebuffer) {
 	const uint8_t  *globdata = GLOBDATA_BIN;
 	const uint8_t  *map      = MAP_BIN;
@@ -178,13 +220,18 @@ void draw_globe(uint8_t *framebuffer) {
 
 	bool drawing_southern_hemisphere = false;
 
+#if WRITE_OUTPUT()
+	output.reserve(1000 * 1024);
+	writer_t w(output); // write on scope exit
+#endif
+
 	do {
 		int di = cs_1CA6; // offset into globdata
 		assert((di >= 1) && (di <= 2867));
 
 		{
 			const uint8_t globdata_at_di = globdata[di];
-			assert(((globdata_at_di >= 0) && (globdata_at_di <= 86) || globdata_at_di == 255)); // 255(-1) as flag?
+			assert(((globdata_at_di >= 0) && (globdata_at_di <= 86) || globdata_at_di == 255)); // 255(-1) as a flag?
 		}
 
 		int8_t gd_val = globdata[di++];
@@ -221,40 +268,50 @@ void draw_globe(uint8_t *framebuffer) {
 			struct result_t
 			{
 				uint16_t gd{};
-				uint16_t grlt_0{};
+				int16_t grlt_0{};
 				uint16_t grlt_1{};
 				uint16_t grlt_2{};
 			};
 
 			auto func1 = [](const uint8_t* globdata_, const globe_rotation_lookup_table_t& rotation_lookup_table, const int16_t ofs1, const int base_ofs) {
-				// 3290,3490,3690,3890,4090,4290,4490,4690,...,14690,14890,15090,15290,15490,15690,15890 
-				assert((base_ofs >= 3290) && (base_ofs <= 16090) && ((base_ofs % 10) == 0));
+				// 3290,3490,3690,3890,4090,4290,4490,4690,...,14690,14890,15090,15290,15490,15690,15890
+				// start-offset(3290)+n*200
+				assert((base_ofs >= 3290) && (base_ofs <= 15890) && ((base_ofs % 10) == 0));
 
 				const int8_t lo_ofs1 = lo(ofs1);
+				assert((lo_ofs1 >= -98) && (lo_ofs1 <= 98));
 
 				const int offset1 = (lo_ofs1 < 0) ? -lo_ofs1 : lo_ofs1;
 				assert((offset1 >= 0) && (offset1 <= 98)); // 1,2,3,4,5,9,11,19,28,39,51,67,74,86,94,97,98
 
 				const uint8_t* sub_globdata = &globdata_[base_ofs + offset1];
 				//printf("&globdata_[%i + %i] == &globdata_[%u]\n", base_ofs, offset1, sub_globdata - globdata_);
+				//output += std::to_string(base_ofs + offset1) + "\n";
 
 				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4*uint16_t
 				const uint8_t index_from_gd1 = sub_globdata[0];
 				//0,2,4,6,...,190,192,194,196 -> does not fit into int8_t
 				assert((index_from_gd1 >= 0) && (index_from_gd1 <= 196) && ((index_from_gd1 % 2) == 0));
 
-				const auto& entry = globe_rotation_lookup_table[sub_globdata[0] / 2];
+				const auto& entry = globe_rotation_lookup_table[index_from_gd1 / 2];
+				assert((entry.unk0 >= 0) && (entry.unk0 <= 25334)); // signed: -25334 ... +25334
+				assert((entry.unk1 >= 3) && (entry.unk1 <= 199));
+				assert((entry.fp_hi >= 0) && (entry.fp_hi <= 397)); // 0,1,2,3,4,...,397
 
-				// hi & lo < 0?
-				const uint16_t grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
-				assert((grlt_0 >= 0) && (grlt_0 <= 65138) && ((grlt_0 % 2) == 0));
+				// ofs1 < 0 == hi & lo < 0?
+				const int16_t grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
+				//with uint16_t
+				//assert((grlt_0 <= 65138) && ((grlt_0 % 2) == 0));
+				//with int16_t
+				assert((grlt_0 >= -25334) && (grlt_0 <= 25334) && ((grlt_0 % 2) == 0));
 
 				const uint16_t grlt_2 = entry.fp_hi;
-				assert((grlt_2 >= 0) && (grlt_2 <= 397)); // 1,2,3,4,...,397
 
 				const uint8_t index_from_gd2 = sub_globdata[MAGIC_200 / 2];
 				//1,2,3,4,...,97,98,99 -> fits into int8_t
 				assert(index_from_gd2 >= 0 && index_from_gd2 <= 99);
+
+				// (lo_ofs1 < 0) ? entry.unk1(3-199) - index_from_gd2(0..99) : index_from_gd2(0..99)
 				const uint16_t gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd2 : index_from_gd2;
 
 				const uint16_t grlt_1 = entry.unk1 * 2;
@@ -294,23 +351,31 @@ void draw_globe(uint8_t *framebuffer) {
 			constexpr int MAGIC_OFS1 = 0x62FC; // middle?
 			const uint8_t* sub_map = &map[MAGIC_OFS1];
 
-			const int ofs1 = some_offset(
-				res.grlt_2 - res.gd,
-				res.grlt_1,
-				res.grlt_0);
+			// left part of the globe
+			{
+				const int ofs1 = some_offset(
+					res.grlt_2 - res.gd,
+					res.grlt_1,
+					res.grlt_0);
 
-			assert((ofs1 >= -25334) && (ofs1 <= 25339));
+				assert((ofs1 >= -25334) && (ofs1 <= 25339));
 
-			framebuffer[cs_1CAE--] = pixel_color(sub_map[ofs1]);
+				const uint8_t col1 = pixel_color(sub_map[ofs1]);
+				framebuffer[cs_1CAE--] = col1;
+			}
 
-			const int ofs2 = some_offset(
-				res.grlt_2 + res.gd - res.grlt_1,
-				res.grlt_1,
-				res.grlt_0);
+			// right part of the globe
+			{
+				const int ofs2 = some_offset(
+					res.grlt_2 + res.gd - res.grlt_1,
+					res.grlt_1,
+					res.grlt_0);
 
-			assert((ofs2 >= -25334) && (ofs2 <= 25339));
+				assert((ofs2 >= -25334) && (ofs2 <= 25339));
 
-			framebuffer[cs_1CB0++] = pixel_color(sub_map[ofs2]);
+				const uint8_t col2 = pixel_color(sub_map[ofs2]);
+				framebuffer[cs_1CB0++] = col2;
+			}
 
 			si += MAGIC_200;
 
@@ -357,7 +422,7 @@ std::array<uint8_t, 3> pal_color(int color_index)
 	return { triple[0], triple[1], triple[2] };
 }
 
-#define COMPARE_WITH_INITAL_CODE() (true)
+#define COMPARE_WITH_INITAL_CODE() (false)
 
 #if COMPARE_WITH_INITAL_CODE()
 namespace initial_port
@@ -438,7 +503,7 @@ struct animated_t {
 	int frame{0};
 
 	pos_t next() {
-		float f = sinf(frame / 200.0);
+		float f = sinf(frame / 200.0f);
 		int16_t tilt = -MAX_TILT * f;
 		int16_t rotation = 150 * frame;
 
