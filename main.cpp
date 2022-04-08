@@ -181,12 +181,12 @@ struct biggest_smallest_t
 		if (value < smallest)
 		{
 			smallest = value;
-			std::cout << "smallest: " << smallest << std::endl;
+			std::cout << "smallest: " << (int)smallest << std::endl;
 		}
 		if (value > biggest)
 		{
 			biggest = value;
-			std::cout << "biggest: " << biggest << std::endl;
+			std::cout << "biggest: " << (int)biggest << std::endl;
 		}
 	}
 };
@@ -284,7 +284,7 @@ void draw_globe(uint8_t *framebuffer) {
 
 		int8_t gd_val = globdata[di++];
 
-		if (gd_val < 0) { // as uint8_t == 255
+		if (gd_val < 0) { // as uint8_t == 255(-1)
 			drawing_southern_hemisphere = true;
 
 			cs_1CB4 = -cs_1CB4;
@@ -323,6 +323,30 @@ void draw_globe(uint8_t *framebuffer) {
 				uint16_t grlt_1{};
 				uint16_t entry_fp_hi{};
 			};
+
+/*
+structure... of the func1 accessed data (something like that)
+
+struct unk_struct0
+{
+  uint8_t unk1[99]; // <-- index_from_gd1
+  uint8_t unused; // <-- index_from_gd2
+}
+
+struct unk_struct1 // sizeof() == 200 -> si += MAGIC_200 
+{
+  unk_struct0 key3; // start of sub_globdata[0]
+  unk_struct0 key4; // start of sub_globdata[MAGIC_200 / 2]
+}
+
+(file-begin)
+  ...
+  offset: 3290
+    unk_struct1 key3_4[64]; // &globdata_[base_ofs + offset1]
+  offset: 16090
+    uint8_t unused;
+(file-end) 
+*/
 
 			auto func1 = [](const uint8_t* globdata_, const globe_rotation_lookup_table_t& rotation_lookup_table, const int16_t ofs1, const int base_ofs) {
 				// 3290,3490,3690,3890,4090,4290,4490,4690,...,14690,14890,15090,15290,15490,15690,15890
@@ -445,6 +469,9 @@ void draw_globe(uint8_t *framebuffer) {
 
 			// al = ax & 0x00ff;
 		} while (gd_val >= 0);
+
+		assert((gd_val >= -65) && (gd_val >= -1));
+		assert((uint8_t(gd_val) >= 191) && (uint8_t(gd_val) <= 255));
 
 		assert((di >= 66) && (di <= 2867));
 
