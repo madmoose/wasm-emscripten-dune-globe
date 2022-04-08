@@ -6,6 +6,9 @@
 #include <string>
 #include <fstream>
 #include <iostream>
+#include <unordered_map>
+#include <set>
+#include <algorithm>
 
 #include <SDL/SDL.h>
 #undef main
@@ -206,6 +209,48 @@ struct writer_t
 
 std::string output;
 
+struct accessors_t
+{
+	using globedata_accessors_t = std::unordered_map<unsigned, std::set<int>>;
+	globedata_accessors_t map;
+
+	accessors_t()
+	{
+	}
+
+	~accessors_t()
+	{
+		std::ofstream outfile("d:/temp/accessors.txt", std::ios_base::app);
+		for (int i = 0; i < sizeof(GLOBDATA_BIN); ++i)
+		{
+			std::string whos = "unused";
+			auto it = map.find(i);
+			if (it != map.end())
+			{
+				std::vector<int> v(it->second.begin(), it->second.end());
+				std::sort(v.begin(), v.end());
+				whos = "";
+				for (int w = 0; w < v.size(); ++w)
+				{
+					whos += std::to_string(v[w]);
+					if (w < v.size() - 1)
+					{
+						whos += ",";
+					}
+				}
+			}
+			outfile << std::to_string(i) << ": " << whos << "\n";
+		}
+	}
+
+	void access(unsigned offset_, int who_)
+	{
+		map[offset_].insert(who_);
+	}
+};
+
+static accessors_t accessors;
+
 void draw_globe(uint8_t *framebuffer) {
 	const uint8_t  *globdata = GLOBDATA_BIN;
 	const uint8_t  *map      = MAP_BIN;
@@ -231,6 +276,9 @@ void draw_globe(uint8_t *framebuffer) {
 
 		{
 			const uint8_t globdata_at_di = globdata[di];
+
+			//accessors.access(di, 0);
+
 			assert(((globdata_at_di >= 0) && (globdata_at_di <= 86) || globdata_at_di == 255)); // 255(-1) as a flag?
 		}
 
@@ -252,8 +300,11 @@ void draw_globe(uint8_t *framebuffer) {
 			assert(globdata[0] == 191); // as int8_t = -65
 
 			di = 1 - int8_t(globdata[0]); // 1 - ( -65 ) = 66
+			//accessors.access(0, 1);
+
 			assert(di == 66);
 			assert(globdata[di] == 1);
+			//accessors.access(di, 2);
 
 			gd_val = globdata[di++];
 		}
@@ -289,7 +340,10 @@ void draw_globe(uint8_t *framebuffer) {
 				//output += std::to_string(base_ofs + offset1) + "\n";
 
 				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4*uint16_t
+
 				const uint8_t index_from_gd1 = sub_globdata[0];
+				//accessors.access(&sub_globdata[0] - globdata_, 3);
+
 				//0,2,4,6,...,190,192,194,196 -> does not fit into int8_t
 				assert((index_from_gd1 >= 0) && (index_from_gd1 <= 196) && ((index_from_gd1 % 2) == 0));
 
@@ -306,6 +360,8 @@ void draw_globe(uint8_t *framebuffer) {
 				assert((grlt_0 >= -25334) && (grlt_0 <= 25334) && ((grlt_0 % 2) == 0));
 
 				const uint8_t index_from_gd2 = sub_globdata[MAGIC_200 / 2];
+				//accessors.access(&sub_globdata[MAGIC_200 / 2] - globdata_, 4);
+
 				//1,2,3,4,...,97,98,99 -> fits into int8_t
 				assert(index_from_gd2 >= 0 && index_from_gd2 <= 99);
 
@@ -383,7 +439,10 @@ void draw_globe(uint8_t *framebuffer) {
 
 			si += MAGIC_200;
 
+			//accessors.access(globdata[di], 5);
+
 			gd_val = globdata[di++];
+
 			// al = ax & 0x00ff;
 		} while (gd_val >= 0);
 
@@ -437,8 +496,12 @@ namespace initial_port
 std::array<uint8_t, FRAMEBUFFER_WIDTH* FRAMEBUFFER_HEIGHT> test_framebuffer{};
 #endif
 
+#define DO_DRAW() (true)
+
 void draw_frame(void *draw_params) {
+#if DO_DRAW()
 	if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
+#endif
 
 	auto* dp = reinterpret_cast<draw_params_t*>(draw_params);
 	int16_t  tilt     = dp->tilt;
@@ -462,7 +525,8 @@ void draw_frame(void *draw_params) {
 		throw 0xdeadbeef;
 	}
 #endif
-	
+
+#if DO_DRAW()
 	uint8_t *screenbuffer = (uint8_t*)screen->pixels;
 
 	for (int i = 0; i != framebuffer.size(); ++i) {
@@ -496,6 +560,7 @@ void draw_frame(void *draw_params) {
 	if (SDL_MUSTLOCK(screen)) SDL_UnlockSurface(screen);
 
 	SDL_Flip(screen);
+#endif
 }
 
 struct pos_t {
@@ -514,6 +579,39 @@ struct animated_t {
 		frame++;
 
 		return { tilt, rotation };
+	}
+};
+
+struct complete_t {
+	int16_t tilt = -97;
+	uint16_t rotation = 0;
+
+	bool stop = false;
+
+	pos_t next() {
+		//printf("rotation: %i, %u\n", rotation, uint16_t(rotation)); uses full range of 0-65535 for a full rotation
+		//printf("tilt: %i\n", tilt);
+
+		if (tilt < 97)
+		{
+			if (rotation < std::numeric_limits<uint16_t>::max())
+			{
+				//printf("rotation: %u\n", rotation);
+				++rotation;
+			}
+			else
+			{
+				printf("new tilt: %i\n", tilt);
+				++tilt;
+				rotation = 0;
+			}
+		}
+		else
+		{
+			stop = true;
+		}
+
+		return { tilt, (int16_t)rotation };
 	}
 };
 
@@ -538,6 +636,7 @@ int main() {
 
 	bool is_animated = false;
 	animated_t animated;
+	complete_t complete;
 
 	pos_t cursor_based;
 
@@ -583,10 +682,18 @@ int main() {
 			animated.frame = cursor_based.rotation / 150;
 		}
 
+#if 0
+		cursor_based = complete.next();
+		if (complete.stop)
+		{
+			return 0;
+		}
+#endif
+
 		draw_params_t dp{ cursor_based.tilt , cursor_based.rotation };
 		draw_frame(&dp);
 
-		//SDL_Delay(10);
+		SDL_Delay(10);
 	}
 #endif
 	SDL_Quit();
