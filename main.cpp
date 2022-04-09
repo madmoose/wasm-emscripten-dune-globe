@@ -230,7 +230,7 @@ struct accessors_t
 	~accessors_t()
 	{
 		std::ofstream outfile("d:/temp/accessors.txt", std::ios_base::app);
-		for (int i = 0; i < sizeof(GLOBDATA_BIN); ++i)
+		for (int i = 0; i < sizeof(MAP_BIN); ++i)
 		{
 			std::string whos = "unused";
 			auto it = map.find(i);
@@ -287,20 +287,100 @@ static_assert(sizeof(GLOBDATA_BIN_t::unk0) == 3290, "wrong size");
 static_assert(offsetof(GLOBDATA_BIN_t, all_slices) == 3290,"wrong offset");
 static_assert(sizeof(GLOBDATA_BIN_t::all_slices) == 12800, "wrong size");
 
-#define USE_GLOBE_DATA2() (false)
+struct result_t
+{
+	int16_t gd{};
+	int16_t grlt_0{};
+	uint16_t grlt_1{};
+	uint16_t entry_fp_hi{};
+};
+
+result_t func1(const table_slices_t& tables, const globe_rotation_lookup_table_t& rotation_lookup_table, const int16_t ofs1) {
+	const int8_t lo_ofs1 = lo(ofs1);
+	assert_throw((lo_ofs1 >= -98) && (lo_ofs1 <= 98));
+
+	const int offset1 = (lo_ofs1 < 0) ? -lo_ofs1 : lo_ofs1;
+	assert_throw((offset1 >= 0) && (offset1 <= 98)); // 1,2,3,4,5,9,11,19,28,39,51,67,74,86,94,97,98
+
+	const uint8_t index_from_gd1 = tables.table0_slice.value[offset1];
+	//accessors.access(&sub_globdata[0] - globdata_, 3);
+
+	//0,2,4,6,...,190,192,194,196 -> does not fit into int8_t
+	assert_throw((index_from_gd1 >= 0) && (index_from_gd1 <= 196) && ((index_from_gd1 % 2) == 0));
+
+	const auto& entry = globe_rotation_lookup_table[index_from_gd1 / 2];
+	assert_throw((entry.unk0 >= 0) && (entry.unk0 <= 25334)); // signed: -25334 ... +25334
+	assert_throw((entry.unk1 >= 3) && (entry.unk1 <= 199));
+	assert_throw((entry.fp_hi >= 0) && (entry.fp_hi <= 397)); // 0,1,2,3,4,...,397
+
+	// ofs1 < 0 == hi & lo < 0?
+	const int16_t grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
+	//with uint16_t
+	//assert((grlt_0 <= 65138) && ((grlt_0 % 2) == 0));
+	//with int16_t
+	assert_throw((grlt_0 >= -25334) && (grlt_0 <= 25334) && ((grlt_0 % 2) == 0));
+
+	const uint8_t index_from_gd2 = tables.table1_slice.value[offset1];
+	//accessors.access(&sub_globdata[MAGIC_200 / 2] - globdata_, 4);
+
+	//1,2,3,4,...,97,98,99 -> fits into int8_t
+	assert_throw(index_from_gd2 >= 0 && index_from_gd2 <= 99);
+
+	// (lo_ofs1 < 0) ? entry.unk1(3-199) - index_from_gd2(0..99) : index_from_gd2(0..99)
+	const int16_t gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd2 : index_from_gd2;
+	assert_throw((gd >= 0) && (gd <= 195));
+
+	const uint16_t grlt_1 = entry.unk1 * 2;
+	assert_throw((grlt_1 >= 6) && (grlt_1 <= 398) && ((grlt_1 % 2) == 0));
+
+	return result_t{ gd, grlt_0, grlt_1, entry.fp_hi };
+};
+
+inline
+int some_offset(int16_t value, int16_t adjust1, int16_t adjust2) {
+	if (value < 0) {
+		value += adjust1;
+	}
+	value += adjust2;
+	return int(value);
+};
+
+uint8_t pixel_color(uint8_t value) {
+	//base color?
+	uint8_t color = value & 0x0f;
+
+	// this code is currently not in use
+	if ((value & 0x30) == 0x10) {
+		// overlay color?
+		if (color < 8) {
+			color += 12;
+		}
+	}
+
+	color += 0x10;
+	return color;
+};
+
+void set_pixel_color(uint8_t* framebuffer_pixel, int map_ofs)
+{
+	constexpr int MAGIC_OFS1 = 0x62FC; // middle?
+	const uint8_t* sub_map = &MAP_BIN[MAGIC_OFS1];
+
+	assert_throw((map_ofs >= -25334) && (map_ofs <= 25339));
+
+	*framebuffer_pixel = pixel_color(sub_map[map_ofs]);
+};
 
 void draw_globe(uint8_t *framebuffer) {
-	const uint8_t  *map      = MAP_BIN;
-
 	const GLOBDATA_BIN_t* globdata2 = reinterpret_cast<const GLOBDATA_BIN_t*>(GLOBDATA_BIN);
 
 	int cs_1CA6 = 1;    // offset into globdata
 	int cs_1CB4 = -FRAMEBUFFER_WIDTH; // screen width
 
 	const int globe_center_xy_offset1 = frame_buffer_offset(160, 79);
-	int cs_1CB0 = globe_center_xy_offset1;
+	int right_side_globe_pixel_ofs = globe_center_xy_offset1;
 	int cs_1CB2 = globe_center_xy_offset1;
-	int cs_1CAE = globe_center_xy_offset1 - 1;
+	int left_side_globe_pixel_ofs = globe_center_xy_offset1 - 1;
 
 	bool drawing_southern_hemisphere = false;
 
@@ -332,9 +412,9 @@ void draw_globe(uint8_t *framebuffer) {
 			}
 
 			const int globe_center_xy_offset = frame_buffer_offset(160, 80);
-			cs_1CB0 = globe_center_xy_offset;
+			right_side_globe_pixel_ofs = globe_center_xy_offset;
 			cs_1CB2 = globe_center_xy_offset;
-			cs_1CAE = globe_center_xy_offset - 1;
+			left_side_globe_pixel_ofs = globe_center_xy_offset - 1;
 
 			assert_throw(globdata2->unk0[0] == 191); // as int8_t = -65
 
@@ -355,120 +435,30 @@ void draw_globe(uint8_t *framebuffer) {
 				gd_val = -gd_val;
 			}
 
-			struct result_t
-			{
-				int16_t gd{};
-				int16_t grlt_0{};
-				uint16_t grlt_1{};
-				uint16_t entry_fp_hi{};
-			};
-
-			auto func1 = [](const table_slices_t& tables, const globe_rotation_lookup_table_t& rotation_lookup_table, const int16_t ofs1) {
-				const int8_t lo_ofs1 = lo(ofs1);
-				assert_throw((lo_ofs1 >= -98) && (lo_ofs1 <= 98));
-
-				const int offset1 = (lo_ofs1 < 0) ? -lo_ofs1 : lo_ofs1;
-				assert_throw((offset1 >= 0) && (offset1 <= 98)); // 1,2,3,4,5,9,11,19,28,39,51,67,74,86,94,97,98
-
-				const uint8_t index_from_gd1 = tables.table0_slice.value[offset1];
-				//accessors.access(&sub_globdata[0] - globdata_, 3);
-
-				//0,2,4,6,...,190,192,194,196 -> does not fit into int8_t
-				assert_throw((index_from_gd1 >= 0) && (index_from_gd1 <= 196) && ((index_from_gd1 % 2) == 0));
-
-				const auto& entry = globe_rotation_lookup_table[index_from_gd1 / 2];
-				assert_throw((entry.unk0 >= 0) && (entry.unk0 <= 25334)); // signed: -25334 ... +25334
-				assert_throw((entry.unk1 >= 3) && (entry.unk1 <= 199));
-				assert_throw((entry.fp_hi >= 0) && (entry.fp_hi <= 397)); // 0,1,2,3,4,...,397
-
-				// ofs1 < 0 == hi & lo < 0?
-				const int16_t grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
-				//with uint16_t
-				//assert((grlt_0 <= 65138) && ((grlt_0 % 2) == 0));
-				//with int16_t
-				assert_throw((grlt_0 >= -25334) && (grlt_0 <= 25334) && ((grlt_0 % 2) == 0));
-
-				const uint8_t index_from_gd2 = tables.table1_slice.value[offset1];
-				//accessors.access(&sub_globdata[MAGIC_200 / 2] - globdata_, 4);
-
-				//1,2,3,4,...,97,98,99 -> fits into int8_t
-				assert_throw(index_from_gd2 >= 0 && index_from_gd2 <= 99);
-
-				// (lo_ofs1 < 0) ? entry.unk1(3-199) - index_from_gd2(0..99) : index_from_gd2(0..99)
-				const int16_t gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd2 : index_from_gd2;
-				assert_throw((gd >= 0) && (gd <= 195));
-
-				const uint16_t grlt_1 = entry.unk1 * 2;
-				assert_throw((grlt_1 >= 6) && (grlt_1 <= 398) && ((grlt_1 % 2) == 0));
-
-				return result_t{ gd, grlt_0, grlt_1, entry.fp_hi };
-			};
-
-			auto some_offset = [](int16_t value, int16_t adjust1, int16_t adjust2) {
-				if (value < 0) {
-					value += adjust1;
-				}
-				value += adjust2;
-				return int(value);
-			};
-
-			auto pixel_color = [](uint8_t value) {
-				//base color?
-				uint8_t color = value & 0x0f;
-
-				// this code is currently not in use
-				if ((value & 0x30) == 0x10) {
-					// overlay color?
-					if (color < 8) {
-						color += 12;
-					}
-				}
-
-				color += 0x10;
-				return color;
-			};
-
 			// hi,lo int8 values?
 			const uint16_t some_value = globe_tilt_lookup_table[MAX_TILT + gd_val];
-			const result_t res = func1(globdata2->all_slices[index], globe_rotation_lookup_table, some_value);
+			const result_t res = func1(globdata2->all_slices[index++], globe_rotation_lookup_table, some_value);
 
 			assert_throw((res.gd >= 0) && (res.gd <= 195));
 			assert_throw((res.grlt_0 >= -25334) && (res.grlt_0 <= 25334) && ((res.grlt_0 % 2) == 0));
 			assert_throw((res.grlt_1 >= 6) && (res.grlt_1 <= 398) && ((res.grlt_1 % 2) == 0));
 			assert_throw((res.entry_fp_hi >= 0) && (res.entry_fp_hi <= 397)); // 0,1,2,3,4,...,397
 
-			constexpr int MAGIC_OFS1 = 0x62FC; // middle?
-			const uint8_t* sub_map = &map[MAGIC_OFS1];
-
 			// left part of the globe
-			{
-				const int ofs1 = some_offset(
-					res.entry_fp_hi - res.gd,
-					res.grlt_1,
-					res.grlt_0);
-
-				assert_throw((ofs1 >= -25334) && (ofs1 <= 25339));
-
-				const uint8_t col1 = pixel_color(sub_map[ofs1]);
-				framebuffer[cs_1CAE--] = col1;
-			}
+			set_pixel_color(
+				&framebuffer[left_side_globe_pixel_ofs--],
+				some_offset(res.entry_fp_hi - res.gd,
+				res.grlt_1,
+				res.grlt_0)
+			);
 
 			// right part of the globe
-			{
-				const int ofs2 = some_offset(
-					res.entry_fp_hi + res.gd - res.grlt_1,
-					res.grlt_1,
-					res.grlt_0);
-
-				assert_throw((ofs2 >= -25334) && (ofs2 <= 25339));
-
-				const uint8_t col2 = pixel_color(sub_map[ofs2]);
-				framebuffer[cs_1CB0++] = col2;
-			}
-
-			++index;
-
-			//accessors.access(globdata[di], 5);
+			set_pixel_color(
+				&framebuffer[right_side_globe_pixel_ofs++],
+				some_offset(res.entry_fp_hi + res.gd - res.grlt_1,
+				res.grlt_1,
+				res.grlt_0)
+			);
 
 			gd_val = globdata2->unk0[di++];
 
@@ -482,8 +472,8 @@ void draw_globe(uint8_t *framebuffer) {
 
 		cs_1CA6 = di;
 		cs_1CB2 += cs_1CB4;
-		cs_1CB0 = cs_1CB2;
-		cs_1CAE = cs_1CB2 - 1;
+		right_side_globe_pixel_ofs = cs_1CB2;
+		left_side_globe_pixel_ofs = cs_1CB2 - 1;
 	} while (true);
 }
 
