@@ -507,7 +507,7 @@ std::array<uint8_t, 3> pal_color(int color_index)
 	return { triple[0], triple[1], triple[2] };
 }
 
-#define COMPARE_WITH_INITAL_CODE() (false)
+#define COMPARE_WITH_INITAL_CODE() (true)
 
 #if COMPARE_WITH_INITAL_CODE()
 namespace initial_port
@@ -715,7 +715,7 @@ int main() {
 		draw_params_t dp{ cursor_based.tilt , cursor_based.rotation };
 		draw_frame(&dp);
 
-		SDL_Delay(10);
+		//SDL_Delay(10);
 	}
 #endif
 	SDL_Quit();
