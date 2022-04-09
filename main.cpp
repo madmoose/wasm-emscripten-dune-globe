@@ -30,6 +30,15 @@ SDL_Surface *screen = NULL;
 std::array<uint8_t, FRAMEBUFFER_WIDTH* FRAMEBUFFER_HEIGHT> framebuffer;
 int          frame = 0;
 
+#define assert_throw(CONDITION) \
+  if( !(CONDITION) ) \
+  { \
+    printf("line: %i\n", __LINE__); \
+    assert(false); \
+	throw 0xdeadbeef; \
+  }
+
+
 struct rotation_lookup_table_entry_t {
 	uint16_t unk0;
 	uint16_t unk1;
@@ -77,8 +86,8 @@ void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
 
 	auto& first = globe_rotation_lookup_table[0];
 
-	assert(first.unk0 == 0);
-	assert(first.unk1 != 0);
+	assert_throw(first.unk0 == 0);
+	assert_throw(first.unk1 != 0);
 	first.fp_hi = hi(dxax);
 	first.fp_lo = lo(dxax);
 
@@ -91,7 +100,7 @@ void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
 	for (int i = 1; i != MAX_TILT+1; ++i) {
 		auto& entry = globe_rotation_lookup_table[i];
 
-		assert(entry.unk0 != 0); // meaning?
+		assert_throw(entry.unk0 != 0); // meaning?
 		uint32_t dxax = 2 * uint32_t(bx) * uint32_t(entry.unk1);
 		entry.fp_hi = hi(dxax);
 		entry.fp_lo = lo(dxax);
@@ -230,7 +239,7 @@ struct accessors_t
 				std::vector<int> v(it->second.begin(), it->second.end());
 				std::sort(v.begin(), v.end());
 				whos = "";
-				for (int w = 0; w < v.size(); ++w)
+				for (size_t w = 0; w < v.size(); ++w)
 				{
 					whos += std::to_string(v[w]);
 					if (w < v.size() - 1)
@@ -251,9 +260,39 @@ struct accessors_t
 
 static accessors_t accessors;
 
+// layout of GLOBDATA_BIN
+#pragma pack(push,1)
+struct table_values_t
+{
+	uint8_t value[99]; // <-- index_from_gd1
+	uint8_t unused; // forming the grey horizontal lines on the image with the two tables 
+};
+
+struct table_slices_t // sizeof() == 200 -> si += MAGIC_200 
+{
+	table_values_t table0_slice; // start of sub_globdata[0]
+	table_values_t table1_slice; // start of sub_globdata[MAGIC_200 / 2]
+};
+
+struct GLOBDATA_BIN_t
+{
+	uint8_t unk0[3290];
+	table_slices_t all_slices[64];  // index is si/200 <-- all bytes of tables_slices[64] form the image with the two tables side by side
+	uint8_t unused;
+};
+#pragma pack(pop)
+static_assert(sizeof(GLOBDATA_BIN_t) == sizeof(GLOBDATA_BIN),"wrong size");
+static_assert(offsetof(GLOBDATA_BIN_t, unk0) == 0, "wrong offset");
+static_assert(sizeof(GLOBDATA_BIN_t::unk0) == 3290, "wrong size");
+static_assert(offsetof(GLOBDATA_BIN_t, all_slices) == 3290,"wrong offset");
+static_assert(sizeof(GLOBDATA_BIN_t::all_slices) == 12800, "wrong size");
+
+#define USE_GLOBE_DATA2() (false)
+
 void draw_globe(uint8_t *framebuffer) {
-	const uint8_t  *globdata = GLOBDATA_BIN;
 	const uint8_t  *map      = MAP_BIN;
+
+	const GLOBDATA_BIN_t* globdata2 = reinterpret_cast<const GLOBDATA_BIN_t*>(GLOBDATA_BIN);
 
 	int cs_1CA6 = 1;    // offset into globdata
 	int cs_1CB4 = -FRAMEBUFFER_WIDTH; // screen width
@@ -272,17 +311,17 @@ void draw_globe(uint8_t *framebuffer) {
 
 	do {
 		int di = cs_1CA6; // offset into globdata
-		assert((di >= 1) && (di <= 2867));
+		assert_throw((di >= 1) && (di <= 2867));
 
 		{
-			const uint8_t globdata_at_di = globdata[di];
+			const uint8_t globdata_at_di = globdata2->unk0[di];
 
 			//accessors.access(di, 0);
 
-			assert(((globdata_at_di >= 0) && (globdata_at_di <= 86) || globdata_at_di == 255)); // 255(-1) as a flag?
+			assert_throw(((globdata_at_di >= 0) && (globdata_at_di <= 86) || globdata_at_di == 255)); // 255(-1) as a flag?
 		}
 
-		int8_t gd_val = globdata[di++];
+		int8_t gd_val = globdata2->unk0[di++];
 
 		if (gd_val < 0) { // as uint8_t == 255(-1)
 			drawing_southern_hemisphere = true;
@@ -297,19 +336,19 @@ void draw_globe(uint8_t *framebuffer) {
 			cs_1CB2 = globe_center_xy_offset;
 			cs_1CAE = globe_center_xy_offset - 1;
 
-			assert(globdata[0] == 191); // as int8_t = -65
+			assert_throw(globdata2->unk0[0] == 191); // as int8_t = -65
 
-			di = 1 - int8_t(globdata[0]); // 1 - ( -65 ) = 66
+			di = 1 - int8_t(globdata2->unk0[0]); // 1 - ( -65 ) = 66
 			//accessors.access(0, 1);
 
-			assert(di == 66);
-			assert(globdata[di] == 1);
+			assert_throw(di == 66);
+			assert_throw(globdata2->unk0[di] == 1);
 			//accessors.access(di, 2);
 
-			gd_val = globdata[di++];
+			gd_val = globdata2->unk0[di++];
 		}
 
-		int si = 3290; // offset into globdata
+		int index = 0;
 
 		do {
 			if (drawing_southern_hemisphere) {
@@ -324,77 +363,43 @@ void draw_globe(uint8_t *framebuffer) {
 				uint16_t entry_fp_hi{};
 			};
 
-/*
-structure... of the func1 accessed data (something like that)
-
-struct unk_struct0
-{
-  uint8_t unk1[99]; // <-- index_from_gd1
-  uint8_t unused; // <-- index_from_gd2
-}
-
-struct unk_struct1 // sizeof() == 200 -> si += MAGIC_200 
-{
-  unk_struct0 key3; // start of sub_globdata[0]
-  unk_struct0 key4; // start of sub_globdata[MAGIC_200 / 2]
-}
-
-(file-begin)
-  ...
-  offset: 3290
-    unk_struct1 key3_4[64]; // &globdata_[base_ofs + offset1]
-  offset: 16090
-    uint8_t unused;
-(file-end) 
-*/
-
-			auto func1 = [](const uint8_t* globdata_, const globe_rotation_lookup_table_t& rotation_lookup_table, const int16_t ofs1, const int base_ofs) {
-				// 3290,3490,3690,3890,4090,4290,4490,4690,...,14690,14890,15090,15290,15490,15690,15890
-				// start-offset(3290)+n*200
-				assert((base_ofs >= 3290) && (base_ofs <= 15890) && ((base_ofs % 10) == 0));
-
+			auto func1 = [](const table_slices_t& tables, const globe_rotation_lookup_table_t& rotation_lookup_table, const int16_t ofs1) {
 				const int8_t lo_ofs1 = lo(ofs1);
-				assert((lo_ofs1 >= -98) && (lo_ofs1 <= 98));
+				assert_throw((lo_ofs1 >= -98) && (lo_ofs1 <= 98));
 
 				const int offset1 = (lo_ofs1 < 0) ? -lo_ofs1 : lo_ofs1;
-				assert((offset1 >= 0) && (offset1 <= 98)); // 1,2,3,4,5,9,11,19,28,39,51,67,74,86,94,97,98
+				assert_throw((offset1 >= 0) && (offset1 <= 98)); // 1,2,3,4,5,9,11,19,28,39,51,67,74,86,94,97,98
 
-				const uint8_t* sub_globdata = &globdata_[base_ofs + offset1];
-				//printf("&globdata_[%i + %i] == &globdata_[%u]\n", base_ofs, offset1, sub_globdata - globdata_);
-				//output += std::to_string(base_ofs + offset1) + "\n";
-
-				// sub_globdata contains sizeof(uint16_t)-offsets to the entry but we need a logical index to our entry wich is 4*uint16_t
-
-				const uint8_t index_from_gd1 = sub_globdata[0];
+				const uint8_t index_from_gd1 = tables.table0_slice.value[offset1];
 				//accessors.access(&sub_globdata[0] - globdata_, 3);
 
 				//0,2,4,6,...,190,192,194,196 -> does not fit into int8_t
-				assert((index_from_gd1 >= 0) && (index_from_gd1 <= 196) && ((index_from_gd1 % 2) == 0));
+				assert_throw((index_from_gd1 >= 0) && (index_from_gd1 <= 196) && ((index_from_gd1 % 2) == 0));
 
 				const auto& entry = globe_rotation_lookup_table[index_from_gd1 / 2];
-				assert((entry.unk0 >= 0) && (entry.unk0 <= 25334)); // signed: -25334 ... +25334
-				assert((entry.unk1 >= 3) && (entry.unk1 <= 199));
-				assert((entry.fp_hi >= 0) && (entry.fp_hi <= 397)); // 0,1,2,3,4,...,397
+				assert_throw((entry.unk0 >= 0) && (entry.unk0 <= 25334)); // signed: -25334 ... +25334
+				assert_throw((entry.unk1 >= 3) && (entry.unk1 <= 199));
+				assert_throw((entry.fp_hi >= 0) && (entry.fp_hi <= 397)); // 0,1,2,3,4,...,397
 
 				// ofs1 < 0 == hi & lo < 0?
 				const int16_t grlt_0 = (ofs1 < 0) ? -entry.unk0 : entry.unk0;
 				//with uint16_t
 				//assert((grlt_0 <= 65138) && ((grlt_0 % 2) == 0));
 				//with int16_t
-				assert((grlt_0 >= -25334) && (grlt_0 <= 25334) && ((grlt_0 % 2) == 0));
+				assert_throw((grlt_0 >= -25334) && (grlt_0 <= 25334) && ((grlt_0 % 2) == 0));
 
-				const uint8_t index_from_gd2 = sub_globdata[MAGIC_200 / 2];
+				const uint8_t index_from_gd2 = tables.table1_slice.value[offset1];
 				//accessors.access(&sub_globdata[MAGIC_200 / 2] - globdata_, 4);
 
 				//1,2,3,4,...,97,98,99 -> fits into int8_t
-				assert(index_from_gd2 >= 0 && index_from_gd2 <= 99);
+				assert_throw(index_from_gd2 >= 0 && index_from_gd2 <= 99);
 
 				// (lo_ofs1 < 0) ? entry.unk1(3-199) - index_from_gd2(0..99) : index_from_gd2(0..99)
 				const int16_t gd = (lo_ofs1 < 0) ? entry.unk1 - index_from_gd2 : index_from_gd2;
-				assert((gd >= 0) && (gd <= 195));
+				assert_throw((gd >= 0) && (gd <= 195));
 
 				const uint16_t grlt_1 = entry.unk1 * 2;
-				assert((grlt_1 >= 6) && (grlt_1 <= 398) && ((grlt_1 % 2) == 0));
+				assert_throw((grlt_1 >= 6) && (grlt_1 <= 398) && ((grlt_1 % 2) == 0));
 
 				return result_t{ gd, grlt_0, grlt_1, entry.fp_hi };
 			};
@@ -425,12 +430,12 @@ struct unk_struct1 // sizeof() == 200 -> si += MAGIC_200
 
 			// hi,lo int8 values?
 			const uint16_t some_value = globe_tilt_lookup_table[MAX_TILT + gd_val];
+			const result_t res = func1(globdata2->all_slices[index], globe_rotation_lookup_table, some_value);
 
-			const result_t res = func1(globdata, globe_rotation_lookup_table, some_value, si);
-			assert((res.gd >= 0) && (res.gd <= 195));
-			assert((res.grlt_0 >= -25334) && (res.grlt_0 <= 25334) && ((res.grlt_0 % 2) == 0));
-			assert((res.grlt_1 >= 6) && (res.grlt_1 <= 398) && ((res.grlt_1 % 2) == 0));
-			assert((res.entry_fp_hi >= 0) && (res.entry_fp_hi <= 397)); // 0,1,2,3,4,...,397
+			assert_throw((res.gd >= 0) && (res.gd <= 195));
+			assert_throw((res.grlt_0 >= -25334) && (res.grlt_0 <= 25334) && ((res.grlt_0 % 2) == 0));
+			assert_throw((res.grlt_1 >= 6) && (res.grlt_1 <= 398) && ((res.grlt_1 % 2) == 0));
+			assert_throw((res.entry_fp_hi >= 0) && (res.entry_fp_hi <= 397)); // 0,1,2,3,4,...,397
 
 			constexpr int MAGIC_OFS1 = 0x62FC; // middle?
 			const uint8_t* sub_map = &map[MAGIC_OFS1];
@@ -442,7 +447,7 @@ struct unk_struct1 // sizeof() == 200 -> si += MAGIC_200
 					res.grlt_1,
 					res.grlt_0);
 
-				assert((ofs1 >= -25334) && (ofs1 <= 25339));
+				assert_throw((ofs1 >= -25334) && (ofs1 <= 25339));
 
 				const uint8_t col1 = pixel_color(sub_map[ofs1]);
 				framebuffer[cs_1CAE--] = col1;
@@ -455,25 +460,25 @@ struct unk_struct1 // sizeof() == 200 -> si += MAGIC_200
 					res.grlt_1,
 					res.grlt_0);
 
-				assert((ofs2 >= -25334) && (ofs2 <= 25339));
+				assert_throw((ofs2 >= -25334) && (ofs2 <= 25339));
 
 				const uint8_t col2 = pixel_color(sub_map[ofs2]);
 				framebuffer[cs_1CB0++] = col2;
 			}
 
-			si += MAGIC_200;
+			++index;
 
 			//accessors.access(globdata[di], 5);
 
-			gd_val = globdata[di++];
+			gd_val = globdata2->unk0[di++];
 
 			// al = ax & 0x00ff;
 		} while (gd_val >= 0);
 
-		assert((gd_val >= -65) && (gd_val >= -1));
-		assert((uint8_t(gd_val) >= 191) && (uint8_t(gd_val) <= 255));
+		assert_throw((gd_val >= -65) && (gd_val <= -1));
+		assert_throw((uint8_t(gd_val) >= 191) && (uint8_t(gd_val) <= 255));
 
-		assert((di >= 66) && (di <= 2867));
+		assert_throw((di >= 66) && (di <= 2867));
 
 		cs_1CA6 = di;
 		cs_1CB2 += cs_1CB4;
