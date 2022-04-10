@@ -164,7 +164,7 @@ void precalculate_globe_tilt_lookup_table(int16_t globe_tilt) {
 	} while (i != globe_tilt_lookup_table.size() && v <= 0);
 }
 
-inline
+inline constexpr
 int frame_buffer_offset(int x, int y) {
 	return y * FRAMEBUFFER_WIDTH + x;
 }
@@ -211,7 +211,7 @@ struct writer_t
 	}
 	~writer_t()
 	{
-		std::ofstream outfile("d:/temp/output.txt", std::ios_base::app);
+		std::ofstream outfile("d:/temp/output.txt", std::ios_base::trunc);
 		outfile << output;
 	}
 };
@@ -371,26 +371,55 @@ void set_pixel_color(uint8_t* framebuffer_pixel, int map_ofs)
 	*framebuffer_pixel = pixel_color(sub_map[map_ofs]);
 };
 
+void func2(const table_slices_t& tables, const int8_t gd_val, const int left_side_globe_pixel_ofs, const int right_side_globe_pixel_ofs)
+{
+	// hi,lo int8 values?
+	const uint16_t some_value = globe_tilt_lookup_table[MAX_TILT + gd_val];
+	const result_t res = func1(tables, globe_rotation_lookup_table, some_value);
+
+	assert_throw((res.gd >= 0) && (res.gd <= 195));
+	assert_throw((res.grlt_0 >= -25334) && (res.grlt_0 <= 25334) && ((res.grlt_0 % 2) == 0));
+	assert_throw((res.grlt_1 >= 6) && (res.grlt_1 <= 398) && ((res.grlt_1 % 2) == 0));
+	assert_throw((res.entry_fp_hi >= 0) && (res.entry_fp_hi <= 397)); // 0,1,2,3,4,...,397
+
+	// left part of the globe
+	set_pixel_color(
+		&framebuffer[left_side_globe_pixel_ofs],
+		some_offset(res.entry_fp_hi - res.gd,
+			res.grlt_1,
+			res.grlt_0)
+	);
+
+	// right part of the globe
+	set_pixel_color(
+		&framebuffer[right_side_globe_pixel_ofs],
+		some_offset(res.entry_fp_hi + res.gd - res.grlt_1,
+			res.grlt_1,
+			res.grlt_0)
+	);
+};
+
 void draw_globe(uint8_t *framebuffer) {
-	const GLOBDATA_BIN_t* globdata2 = reinterpret_cast<const GLOBDATA_BIN_t*>(GLOBDATA_BIN);
-
-	int cs_1CA6 = 1;    // offset into globdata
-	int cs_1CB4 = -FRAMEBUFFER_WIDTH; // screen width
-
-	const int globe_center_xy_offset1 = frame_buffer_offset(160, 79);
-	int right_side_globe_pixel_ofs = globe_center_xy_offset1;
-	int cs_1CB2 = globe_center_xy_offset1;
-	int left_side_globe_pixel_ofs = globe_center_xy_offset1 - 1;
-
-	bool drawing_southern_hemisphere = false;
 
 #if WRITE_OUTPUT()
 	output.reserve(1000 * 1024);
 	writer_t w(output); // write on scope exit
 #endif
 
-	do {
-		int di = cs_1CA6; // offset into globdata
+	const GLOBDATA_BIN_t* globdata2 = reinterpret_cast<const GLOBDATA_BIN_t*>(GLOBDATA_BIN);
+
+	int framebuffer_width_dir = -FRAMEBUFFER_WIDTH; // screen width (some sort of direction)
+
+	constexpr int GLOBE_CENTER_OFS1 = frame_buffer_offset(160, 79);
+	int right_side_globe_pixel_ofs = GLOBE_CENTER_OFS1;
+	int cs_1CB2 = GLOBE_CENTER_OFS1;
+	int left_side_globe_pixel_ofs = GLOBE_CENTER_OFS1 - 1;
+
+	bool drawing_southern_hemisphere = false;
+
+	int di = 1; // offset into globdata2->unk0
+
+	while(true) {
 		assert_throw((di >= 1) && (di <= 2867));
 
 		{
@@ -404,17 +433,17 @@ void draw_globe(uint8_t *framebuffer) {
 		int8_t gd_val = globdata2->unk0[di++];
 
 		if (gd_val < 0) { // as uint8_t == 255(-1)
-			drawing_southern_hemisphere = true;
-
-			cs_1CB4 = -cs_1CB4;
-			if (cs_1CB4 < 0) {
+			framebuffer_width_dir = -framebuffer_width_dir; // 1. -FRAMEBUFFER_WIDTH, 2. +FRAMEBUFFER_WIDTH => (second gd_val < 0 ) ends drawing
+			if (framebuffer_width_dir < 0) {
 				return;
 			}
 
-			const int globe_center_xy_offset = frame_buffer_offset(160, 80);
-			right_side_globe_pixel_ofs = globe_center_xy_offset;
-			cs_1CB2 = globe_center_xy_offset;
-			left_side_globe_pixel_ofs = globe_center_xy_offset - 1;
+			drawing_southern_hemisphere = true;
+
+			constexpr int GLOBE_CENTER_OFS2 = frame_buffer_offset(160, 80);
+			right_side_globe_pixel_ofs = GLOBE_CENTER_OFS2;
+			cs_1CB2 = GLOBE_CENTER_OFS2;
+			left_side_globe_pixel_ofs = GLOBE_CENTER_OFS2 - 1;
 
 			assert_throw(globdata2->unk0[0] == 191); // as int8_t = -65
 
@@ -431,34 +460,13 @@ void draw_globe(uint8_t *framebuffer) {
 		int index = 0;
 
 		do {
+			assert_throw(index >= 0 && index <= 63);
+
 			if (drawing_southern_hemisphere) {
 				gd_val = -gd_val;
 			}
 
-			// hi,lo int8 values?
-			const uint16_t some_value = globe_tilt_lookup_table[MAX_TILT + gd_val];
-			const result_t res = func1(globdata2->all_slices[index++], globe_rotation_lookup_table, some_value);
-
-			assert_throw((res.gd >= 0) && (res.gd <= 195));
-			assert_throw((res.grlt_0 >= -25334) && (res.grlt_0 <= 25334) && ((res.grlt_0 % 2) == 0));
-			assert_throw((res.grlt_1 >= 6) && (res.grlt_1 <= 398) && ((res.grlt_1 % 2) == 0));
-			assert_throw((res.entry_fp_hi >= 0) && (res.entry_fp_hi <= 397)); // 0,1,2,3,4,...,397
-
-			// left part of the globe
-			set_pixel_color(
-				&framebuffer[left_side_globe_pixel_ofs--],
-				some_offset(res.entry_fp_hi - res.gd,
-				res.grlt_1,
-				res.grlt_0)
-			);
-
-			// right part of the globe
-			set_pixel_color(
-				&framebuffer[right_side_globe_pixel_ofs++],
-				some_offset(res.entry_fp_hi + res.gd - res.grlt_1,
-				res.grlt_1,
-				res.grlt_0)
-			);
+			func2(globdata2->all_slices[index++], gd_val, left_side_globe_pixel_ofs--, right_side_globe_pixel_ofs++);
 
 			gd_val = globdata2->unk0[di++];
 
@@ -470,11 +478,11 @@ void draw_globe(uint8_t *framebuffer) {
 
 		assert_throw((di >= 66) && (di <= 2867));
 
-		cs_1CA6 = di;
-		cs_1CB2 += cs_1CB4;
+		assert_throw((framebuffer_width_dir == -FRAMEBUFFER_WIDTH) || (framebuffer_width_dir == FRAMEBUFFER_WIDTH));
+		cs_1CB2 += framebuffer_width_dir;
 		right_side_globe_pixel_ofs = cs_1CB2;
 		left_side_globe_pixel_ofs = cs_1CB2 - 1;
-	} while (true);
+	}
 }
 
 void init_globe_rotation_lookup_table() {
@@ -507,7 +515,7 @@ std::array<uint8_t, 3> pal_color(int color_index)
 	return { triple[0], triple[1], triple[2] };
 }
 
-#define COMPARE_WITH_INITAL_CODE() (true)
+#define COMPARE_WITH_INITAL_CODE() (false)
 
 #if COMPARE_WITH_INITAL_CODE()
 namespace initial_port
@@ -714,6 +722,9 @@ int main() {
 
 		draw_params_t dp{ cursor_based.tilt , cursor_based.rotation };
 		draw_frame(&dp);
+#if 0 // just one frame
+		return 0;
+#endif
 
 		//SDL_Delay(10);
 	}
