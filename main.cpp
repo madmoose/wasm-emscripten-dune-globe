@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <set>
 #include <algorithm>
+#include <vector>
 
 #include <SDL/SDL.h>
 #undef main
@@ -264,7 +265,7 @@ static accessors_t accessors;
 #pragma pack(push,1)
 struct table_values_t
 {
-	uint8_t value[99]; // <-- index_from_gd1
+	std::array<uint8_t, 99> value; // <-- index_from_gd1
 	uint8_t unused; // forming the grey horizontal lines on the image with the two tables 
 };
 
@@ -276,8 +277,8 @@ struct table_slices_t // sizeof() == 200 -> si += MAGIC_200
 
 struct GLOBDATA_BIN_t
 {
-	uint8_t unk0[3290];
-	table_slices_t all_slices[64];  // index is si/200 <-- all bytes of tables_slices[64] form the image with the two tables side by side
+	std::array<uint8_t, 3290> unk0;
+	std::array<table_slices_t, 64> all_slices;  // index is si/200 <-- all bytes of tables_slices[64] form the image with the two tables side by side
 	uint8_t unused;
 };
 #pragma pack(pop)
@@ -399,6 +400,55 @@ void func2(const table_slices_t& tables, const int8_t gd_val, const int left_sid
 	);
 };
 
+std::vector<std::vector<uint8_t>> parse_unk0(const std::array<uint8_t, 3290>& unk0)
+{
+	std::vector<std::vector<uint8_t>> lines;
+
+	int di = 1;
+
+	int8_t val0 = unk0[0];
+	assert(val0 == -65);
+
+	// -65
+	// v v v v v v <0
+	// v v v v v v v v v v v v v <0
+	// v v v v v v v v v v v v v v <0
+	// v v v v v v v v v v v v v v v<0
+	// v v v v v v v v v v v v v <0
+	// ...
+	// v v v v v v v v v v <0
+	// -1 <- FINAL negative
+
+	std::vector<uint8_t> values;
+	while (true)
+	{
+		assert_throw((di >= 1) && (di <= 2867));
+
+		int8_t val = unk0[di++];
+		if (val == -1)
+		{
+			break;
+		}
+
+		do
+		{
+			values.push_back(val);
+			val = unk0[di++];
+		} while (val >= 0);
+		lines.push_back(values);
+		values = {};
+	}
+
+	assert_throw(di == 2868);
+
+	for (int i = 2868 + 1; i < unk0.size(); ++i)
+	{
+		assert_throw(unk0[i] == 0);
+	}
+
+	return lines;
+}
+
 void draw_globe(uint8_t *framebuffer) {
 
 #if WRITE_OUTPUT()
@@ -407,6 +457,9 @@ void draw_globe(uint8_t *framebuffer) {
 #endif
 
 	const GLOBDATA_BIN_t* globdata2 = reinterpret_cast<const GLOBDATA_BIN_t*>(GLOBDATA_BIN);
+
+	// TODO: on time parse is enought
+	const auto globe_lines = parse_unk0(globdata2->unk0);
 
 	int framebuffer_width_dir = -FRAMEBUFFER_WIDTH; // screen width (some sort of direction)
 
@@ -417,6 +470,32 @@ void draw_globe(uint8_t *framebuffer) {
 
 	bool drawing_southern_hemisphere = false;
 
+#if 1
+	for (int i = 0; i < 2; ++i) // northern + southern hemisphere
+	{
+		for (int gl = i; gl < globe_lines.size(); ++gl)
+		{
+			const auto& line = globe_lines[gl];
+			for (int index = 0; index < line.size(); ++index)
+			{
+				int8_t gd_val = line[index];
+				func2(globdata2->all_slices[index], drawing_southern_hemisphere ? -gd_val : gd_val, left_side_globe_pixel_ofs--, right_side_globe_pixel_ofs++);
+			}
+
+			cs_1CB2 += framebuffer_width_dir;
+			right_side_globe_pixel_ofs = cs_1CB2;
+			left_side_globe_pixel_ofs = cs_1CB2 - 1;
+		}
+
+		framebuffer_width_dir = FRAMEBUFFER_WIDTH;
+
+		drawing_southern_hemisphere = true;
+		constexpr int GLOBE_CENTER_OFS2 = frame_buffer_offset(160, 80);
+		right_side_globe_pixel_ofs = GLOBE_CENTER_OFS2;
+		cs_1CB2 = GLOBE_CENTER_OFS2;
+		left_side_globe_pixel_ofs = GLOBE_CENTER_OFS2 - 1;
+	}
+#else
 	int di = 1; // offset into globdata2->unk0
 
 	while(true) {
@@ -448,33 +527,25 @@ void draw_globe(uint8_t *framebuffer) {
 			assert_throw(globdata2->unk0[0] == 191); // as int8_t = -65
 
 			di = 1 - int8_t(globdata2->unk0[0]); // 1 - ( -65 ) = 66
-			//accessors.access(0, 1);
 
 			assert_throw(di == 66);
 			assert_throw(globdata2->unk0[di] == 1);
-			//accessors.access(di, 2);
 
 			gd_val = globdata2->unk0[di++];
 		}
-
+		
 		int index = 0;
-
 		do {
 			assert_throw(index >= 0 && index <= 63);
 
-			if (drawing_southern_hemisphere) {
-				gd_val = -gd_val;
-			}
-
-			func2(globdata2->all_slices[index++], gd_val, left_side_globe_pixel_ofs--, right_side_globe_pixel_ofs++);
-
-			gd_val = globdata2->unk0[di++];
+			func2(globdata2->all_slices[index++], drawing_southern_hemisphere ? -gd_val : gd_val, left_side_globe_pixel_ofs--, right_side_globe_pixel_ofs++);
 
 			// al = ax & 0x00ff;
+			gd_val = globdata2->unk0[di++];
 		} while (gd_val >= 0);
 
-		assert_throw((gd_val >= -65) && (gd_val <= -1));
-		assert_throw((uint8_t(gd_val) >= 191) && (uint8_t(gd_val) <= 255));
+		//assert_throw((gd_val >= -65) && (gd_val <= -1));
+		//assert_throw((uint8_t(gd_val) >= 191) && (uint8_t(gd_val) <= 255));
 
 		assert_throw((di >= 66) && (di <= 2867));
 
@@ -483,6 +554,7 @@ void draw_globe(uint8_t *framebuffer) {
 		right_side_globe_pixel_ofs = cs_1CB2;
 		left_side_globe_pixel_ofs = cs_1CB2 - 1;
 	}
+#endif
 }
 
 void init_globe_rotation_lookup_table() {
