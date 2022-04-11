@@ -399,8 +399,7 @@ struct point_t
 void draw_hemisphere(
 	const std::vector<std::vector<uint8_t>>& globe_lines, int start_line, const point_t& start_point,
 	const std::array<table_slices_t, 64>& all_slices,
-	bool drawing_southern_hemisphere,
-	int framebuffer_width_dir
+	bool drawing_southern_hemisphere
 	)
 {
 	const int GLOBE_CENTER_OFS = frame_buffer_offset(start_point.x, start_point.y);
@@ -429,8 +428,8 @@ void draw_hemisphere(
 void draw_globe(uint8_t* framebuffer) {
 	const GLOBDATA_BIN_t* globdata2 = reinterpret_cast<const GLOBDATA_BIN_t*>(GLOBDATA_BIN);
 
-	draw_hemisphere(GLOBLE_LINES, 0, { 160, 79 }, globdata2->all_slices, false, -1);
-	draw_hemisphere(GLOBLE_LINES, 1, { 160, 80 }, globdata2->all_slices, true, +1);
+	draw_hemisphere(GLOBLE_LINES, 0, { 160, 79 }, globdata2->all_slices, false);
+	draw_hemisphere(GLOBLE_LINES, 1, { 160, 80 }, globdata2->all_slices, true);
 }
 
 void init_globe_rotation_lookup_table() {
