@@ -201,66 +201,6 @@ struct biggest_smallest_t
 	}
 };
 
-#define WRITE_OUTPUT() (false)
-
-struct writer_t
-{
-	std::string& output;
-
-	writer_t(std::string& output_) :output(output_)
-	{
-	}
-	~writer_t()
-	{
-		std::ofstream outfile("d:/temp/output.txt", std::ios_base::trunc);
-		outfile << output;
-	}
-};
-
-std::string output;
-
-struct accessors_t
-{
-	using globedata_accessors_t = std::unordered_map<unsigned, std::set<int>>;
-	globedata_accessors_t map;
-
-	accessors_t()
-	{
-	}
-
-	~accessors_t()
-	{
-		std::ofstream outfile("d:/temp/accessors.txt", std::ios_base::app);
-		for (int i = 0; i < sizeof(MAP_BIN); ++i)
-		{
-			std::string whos = "unused";
-			auto it = map.find(i);
-			if (it != map.end())
-			{
-				std::vector<int> v(it->second.begin(), it->second.end());
-				std::sort(v.begin(), v.end());
-				whos = "";
-				for (size_t w = 0; w < v.size(); ++w)
-				{
-					whos += std::to_string(v[w]);
-					if (w < v.size() - 1)
-					{
-						whos += ",";
-					}
-				}
-			}
-			outfile << std::to_string(i) << ": " << whos << "\n";
-		}
-	}
-
-	void access(unsigned offset_, int who_)
-	{
-		map[offset_].insert(who_);
-	}
-};
-
-static accessors_t accessors;
-
 // layout of GLOBDATA_BIN
 #pragma pack(push,1)
 struct table_values_t
@@ -304,7 +244,6 @@ result_t func1(const table_slices_t& tables, const globe_rotation_lookup_table_t
 	assert_throw((offset1 >= 0) && (offset1 <= 98)); // 1,2,3,4,5,9,11,19,28,39,51,67,74,86,94,97,98
 
 	const uint8_t index_from_gd1 = tables.table0_slice.value[offset1];
-	//accessors.access(&sub_globdata[0] - globdata_, 3);
 
 	//0,2,4,6,...,190,192,194,196 -> does not fit into int8_t
 	assert_throw((index_from_gd1 >= 0) && (index_from_gd1 <= 196) && ((index_from_gd1 % 2) == 0));
@@ -449,112 +388,68 @@ std::vector<std::vector<uint8_t>> parse_unk0(const std::array<uint8_t, 3290>& un
 	return lines;
 }
 
+std::vector<std::vector<uint8_t>> GLOBLE_LINES;
+
+struct point_t
+{
+	int x{};
+	int y{};
+};
+
 void draw_globe(uint8_t *framebuffer) {
-
-#if WRITE_OUTPUT()
-	output.reserve(1000 * 1024);
-	writer_t w(output); // write on scope exit
-#endif
-
 	const GLOBDATA_BIN_t* globdata2 = reinterpret_cast<const GLOBDATA_BIN_t*>(GLOBDATA_BIN);
 
-	// TODO: on time parse is enought
-	const auto globe_lines = parse_unk0(globdata2->unk0);
-
-	int framebuffer_width_dir = -FRAMEBUFFER_WIDTH; // screen width (some sort of direction)
-
-	constexpr int GLOBE_CENTER_OFS1 = frame_buffer_offset(160, 79);
-	int right_side_globe_pixel_ofs = GLOBE_CENTER_OFS1;
-	int cs_1CB2 = GLOBE_CENTER_OFS1;
-	int left_side_globe_pixel_ofs = GLOBE_CENTER_OFS1 - 1;
-
-	bool drawing_southern_hemisphere = false;
-
-#if 1
 	for (int i = 0; i < 2; ++i) // northern + southern hemisphere
 	{
-		for (int gl = i; gl < globe_lines.size(); ++gl)
+		point_t start_point;
+		bool drawing_southern_hemisphere = false;
+		int framebuffer_width_dir = -1;
+
+		if (i == 0)
 		{
-			const auto& line = globe_lines[gl];
-			for (int index = 0; index < line.size(); ++index)
-			{
-				int8_t gd_val = line[index];
-				func2(globdata2->all_slices[index], drawing_southern_hemisphere ? -gd_val : gd_val, left_side_globe_pixel_ofs--, right_side_globe_pixel_ofs++);
-			}
-
-			cs_1CB2 += framebuffer_width_dir;
-			right_side_globe_pixel_ofs = cs_1CB2;
-			left_side_globe_pixel_ofs = cs_1CB2 - 1;
+			start_point = { 160, 79 };
+			drawing_southern_hemisphere = false;
+			framebuffer_width_dir = -1;
 		}
-
-		framebuffer_width_dir = FRAMEBUFFER_WIDTH;
-
-		drawing_southern_hemisphere = true;
-		constexpr int GLOBE_CENTER_OFS2 = frame_buffer_offset(160, 80);
-		right_side_globe_pixel_ofs = GLOBE_CENTER_OFS2;
-		cs_1CB2 = GLOBE_CENTER_OFS2;
-		left_side_globe_pixel_ofs = GLOBE_CENTER_OFS2 - 1;
-	}
-#else
-	int di = 1; // offset into globdata2->unk0
-
-	while(true) {
-		assert_throw((di >= 1) && (di <= 2867));
-
+		else
 		{
-			const uint8_t globdata_at_di = globdata2->unk0[di];
-
-			//accessors.access(di, 0);
-
-			assert_throw(((globdata_at_di >= 0) && (globdata_at_di <= 86) || globdata_at_di == 255)); // 255(-1) as a flag?
-		}
-
-		int8_t gd_val = globdata2->unk0[di++];
-
-		if (gd_val < 0) { // as uint8_t == 255(-1)
-			framebuffer_width_dir = -framebuffer_width_dir; // 1. -FRAMEBUFFER_WIDTH, 2. +FRAMEBUFFER_WIDTH => (second gd_val < 0 ) ends drawing
-			if (framebuffer_width_dir < 0) {
-				return;
-			}
-
+			start_point = { 160, 80 };
 			drawing_southern_hemisphere = true;
-
-			constexpr int GLOBE_CENTER_OFS2 = frame_buffer_offset(160, 80);
-			right_side_globe_pixel_ofs = GLOBE_CENTER_OFS2;
-			cs_1CB2 = GLOBE_CENTER_OFS2;
-			left_side_globe_pixel_ofs = GLOBE_CENTER_OFS2 - 1;
-
-			assert_throw(globdata2->unk0[0] == 191); // as int8_t = -65
-
-			di = 1 - int8_t(globdata2->unk0[0]); // 1 - ( -65 ) = 66
-
-			assert_throw(di == 66);
-			assert_throw(globdata2->unk0[di] == 1);
-
-			gd_val = globdata2->unk0[di++];
+			framebuffer_width_dir = +1;
 		}
-		
-		int index = 0;
-		do {
-			assert_throw(index >= 0 && index <= 63);
 
-			func2(globdata2->all_slices[index++], drawing_southern_hemisphere ? -gd_val : gd_val, left_side_globe_pixel_ofs--, right_side_globe_pixel_ofs++);
+		auto draw_hemisphere = [](
+			const std::vector<std::vector<uint8_t>>& globe_lines, int start_line, const point_t& start_point,
+			const std::array<table_slices_t, 64>& all_slices,
+			bool drawing_southern_hemisphere,
+			int framebuffer_width_dir
+		)
+		{
+			const int GLOBE_CENTER_OFS = frame_buffer_offset(start_point.x, start_point.y);
+			int right_side_globe_pixel_ofs = GLOBE_CENTER_OFS;
+			int framebuffer_line_start = GLOBE_CENTER_OFS;
+			int left_side_globe_pixel_ofs = GLOBE_CENTER_OFS - 1;
 
-			// al = ax & 0x00ff;
-			gd_val = globdata2->unk0[di++];
-		} while (gd_val >= 0);
+			for (int gl = start_line; gl < GLOBLE_LINES.size(); ++gl)
+			{
+				const auto& line = GLOBLE_LINES[gl];
+				for (int index = 0; index < line.size(); ++index)
+				{
+					int8_t gd_val = line[index];
+					func2(
+						all_slices[index],
+						drawing_southern_hemisphere ? -gd_val : gd_val,
+						left_side_globe_pixel_ofs--, right_side_globe_pixel_ofs++);
+				}
 
-		//assert_throw((gd_val >= -65) && (gd_val <= -1));
-		//assert_throw((uint8_t(gd_val) >= 191) && (uint8_t(gd_val) <= 255));
+				framebuffer_line_start += framebuffer_width_dir * FRAMEBUFFER_WIDTH;
+				right_side_globe_pixel_ofs = framebuffer_line_start;
+				left_side_globe_pixel_ofs = framebuffer_line_start - 1;
+			}
+		};
 
-		assert_throw((di >= 66) && (di <= 2867));
-
-		assert_throw((framebuffer_width_dir == -FRAMEBUFFER_WIDTH) || (framebuffer_width_dir == FRAMEBUFFER_WIDTH));
-		cs_1CB2 += framebuffer_width_dir;
-		right_side_globe_pixel_ofs = cs_1CB2;
-		left_side_globe_pixel_ofs = cs_1CB2 - 1;
+		draw_hemisphere(GLOBLE_LINES, i, start_point, globdata2->all_slices, drawing_southern_hemisphere, framebuffer_width_dir);
 	}
-#endif
 }
 
 void init_globe_rotation_lookup_table() {
@@ -587,7 +482,7 @@ std::array<uint8_t, 3> pal_color(int color_index)
 	return { triple[0], triple[1], triple[2] };
 }
 
-#define COMPARE_WITH_INITAL_CODE() (false)
+#define COMPARE_WITH_INITAL_CODE() (true)
 
 #if COMPARE_WITH_INITAL_CODE()
 namespace initial_port
@@ -720,6 +615,9 @@ struct complete_t {
 extern "C"
 int main() {
 	SDL_Init(SDL_INIT_VIDEO);
+
+	const GLOBDATA_BIN_t* globdata2 = reinterpret_cast<const GLOBDATA_BIN_t*>(GLOBDATA_BIN);
+	GLOBLE_LINES = parse_unk0(globdata2->unk0);
 
 #if !ALWAYS_INIT()
 	init_globe_rotation_lookup_table();
