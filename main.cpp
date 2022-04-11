@@ -248,7 +248,7 @@ result_t func1(const table_slices_t& tables, const globe_rotation_lookup_table_t
 	//0,2,4,6,...,190,192,194,196 -> does not fit into int8_t
 	assert_throw((index_from_gd1 >= 0) && (index_from_gd1 <= 196) && ((index_from_gd1 % 2) == 0));
 
-	const auto& entry = globe_rotation_lookup_table[index_from_gd1 / 2];
+	const auto& entry = rotation_lookup_table[index_from_gd1 / 2];
 	assert_throw((entry.unk0 >= 0) && (entry.unk0 <= 25334)); // signed: -25334 ... +25334
 	assert_throw((entry.unk1 >= 3) && (entry.unk1 <= 199));
 	assert_throw((entry.fp_hi >= 0) && (entry.fp_hi <= 397)); // 0,1,2,3,4,...,397
@@ -341,22 +341,33 @@ void func2(const table_slices_t& tables, const int8_t gd_val, const int left_sid
 
 std::vector<std::vector<uint8_t>> parse_unk0(const std::array<uint8_t, 3290>& unk0)
 {
+#if 0
+// layout documentation
+#pragma pack(push,1)
+	struct unk0_t
+	{
+		int8_t first; // -65
+		std::array<int8_t, 2868> values; // n lines of values ending with negative value (and a final -1 value)
+			//v v v v v v [<0]
+			//v v v v v v v v v v v v [<0]
+			//v v v v v v v v v v v v v [<0]
+			//v v v v v v v v v v v v v v v [<0]
+			//v v v v v v v v v v v v v [<0]
+			//...
+			//v v v v v v v v v v [<0]
+			//-1
+		std::array<uint8_t, 421> unused; // all 0
+	};
+#pragma pack(pop)
+	static_assert(offsetof(unk0_t, unused) == 2869, "wrong offset");
+#endif
+
 	std::vector<std::vector<uint8_t>> lines;
 
 	int di = 1;
 
 	int8_t val0 = unk0[0];
 	assert(val0 == -65);
-
-	// -65
-	// v v v v v v <0
-	// v v v v v v v v v v v v v <0
-	// v v v v v v v v v v v v v v <0
-	// v v v v v v v v v v v v v v v<0
-	// v v v v v v v v v v v v v <0
-	// ...
-	// v v v v v v v v v v <0
-	// -1 <- FINAL negative
 
 	std::vector<uint8_t> values;
 	while (true)
@@ -380,7 +391,7 @@ std::vector<std::vector<uint8_t>> parse_unk0(const std::array<uint8_t, 3290>& un
 
 	assert_throw(di == 2868);
 
-	for (int i = 2868 + 1; i < unk0.size(); ++i)
+	for (int i = 2869; i < unk0.size(); ++i)
 	{
 		assert_throw(unk0[i] == 0);
 	}
@@ -397,11 +408,15 @@ struct point_t
 };
 
 void draw_hemisphere(
-	const std::vector<std::vector<uint8_t>>& globe_lines, int start_line, const point_t& start_point,
-	const std::array<table_slices_t, 64>& all_slices,
-	bool drawing_southern_hemisphere
+	bool drawing_norther_hemisphere,
+	const std::vector<std::vector<uint8_t>>& globe_lines,
+	const std::array<table_slices_t, 64>& all_slices
 	)
 {
+	const int start_line = drawing_norther_hemisphere ? 0 : 1;
+	const auto start_point = drawing_norther_hemisphere ? point_t{ 160, 79 } : point_t{ 160, 80 };
+	const int framebuffer_line_inc = drawing_norther_hemisphere ? -FRAMEBUFFER_WIDTH : FRAMEBUFFER_WIDTH;
+
 	const int GLOBE_CENTER_OFS = frame_buffer_offset(start_point.x, start_point.y);
 	int right_side_globe_pixel_ofs = GLOBE_CENTER_OFS;
 	int framebuffer_line_start = GLOBE_CENTER_OFS;
@@ -415,11 +430,11 @@ void draw_hemisphere(
 			int8_t gd_val = line[index];
 			func2(
 				all_slices[index],
-				drawing_southern_hemisphere ? -gd_val : gd_val,
+				drawing_norther_hemisphere ? gd_val : -gd_val,
 				left_side_globe_pixel_ofs--, right_side_globe_pixel_ofs++);
 		}
 
-		framebuffer_line_start += ( drawing_southern_hemisphere ? +1 : -1 ) * FRAMEBUFFER_WIDTH;
+		framebuffer_line_start += framebuffer_line_inc;
 		right_side_globe_pixel_ofs = framebuffer_line_start;
 		left_side_globe_pixel_ofs = framebuffer_line_start - 1;
 	}
@@ -428,8 +443,8 @@ void draw_hemisphere(
 void draw_globe(uint8_t* framebuffer) {
 	const GLOBDATA_BIN_t* globdata2 = reinterpret_cast<const GLOBDATA_BIN_t*>(GLOBDATA_BIN);
 
-	draw_hemisphere(GLOBLE_LINES, 0, { 160, 79 }, globdata2->all_slices, false);
-	draw_hemisphere(GLOBLE_LINES, 1, { 160, 80 }, globdata2->all_slices, true);
+	draw_hemisphere(true, GLOBLE_LINES, globdata2->all_slices);
+	draw_hemisphere(false, GLOBLE_LINES, globdata2->all_slices);
 }
 
 void init_globe_rotation_lookup_table() {
