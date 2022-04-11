@@ -1,14 +1,8 @@
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
-#include <cmath>
 #include <array>
 #include <string>
-#include <fstream>
-#include <iostream>
-#include <unordered_map>
-#include <set>
-#include <algorithm>
 #include <vector>
 
 #include <SDL/SDL.h>
@@ -178,47 +172,25 @@ void draw_pixel(uint8_t* screen, uint32_t offset, uint8_t red, uint8_t green, ui
 	screen[offset + 3] = alpha;
 }
 
-constexpr int MAGIC_200 = 200;  // FRAMEBUFFER_HEIGHT?
-
-template<typename ValueType>
-struct biggest_smallest_t
-{
-	ValueType smallest = std::numeric_limits<ValueType>::max();
-	ValueType biggest = std::numeric_limits<ValueType>::min();
-
-	void operator()(ValueType value)
-	{
-		if (value < smallest)
-		{
-			smallest = value;
-			std::cout << "smallest: " << (int)smallest << std::endl;
-		}
-		if (value > biggest)
-		{
-			biggest = value;
-			std::cout << "biggest: " << (int)biggest << std::endl;
-		}
-	}
-};
-
 // layout of GLOBDATA_BIN
 #pragma pack(push,1)
 struct table_values_t
 {
-	std::array<uint8_t, 99> value; // <-- index_from_gd1
+	std::array<uint8_t, 99> value;
 	uint8_t unused; // forming the grey horizontal lines on the image with the two tables 
 };
 
-struct table_slices_t // sizeof() == 200 -> si += MAGIC_200 
+struct table_slices_t
 {
-	table_values_t table0_slice; // start of sub_globdata[0]
-	table_values_t table1_slice; // start of sub_globdata[MAGIC_200 / 2]
+	// in the parallel tables
+	table_values_t table0_slice; // left slice
+	table_values_t table1_slice; // right slice
 };
 
 struct GLOBDATA_BIN_t
 {
 	std::array<uint8_t, 3290> unk0;
-	std::array<table_slices_t, 64> all_slices;  // index is si/200 <-- all bytes of tables_slices[64] form the image with the two tables side by side
+	std::array<table_slices_t, 64> all_slices;
 	uint8_t unused;
 };
 #pragma pack(pop)
@@ -277,7 +249,7 @@ result_t func1(const table_slices_t& tables, const globe_rotation_lookup_table_t
 };
 
 inline
-int some_offset(int16_t value, int16_t adjust1, int16_t adjust2) {
+int color_map_offset(int16_t value, int16_t adjust1, int16_t adjust2) {
 	if (value < 0) {
 		value += adjust1;
 	}
@@ -325,7 +297,7 @@ void func2(const table_slices_t& tables, const int8_t gd_val, const int left_sid
 	// left part of the globe
 	set_pixel_color(
 		&framebuffer[left_side_globe_pixel_ofs],
-		some_offset(res.entry_fp_hi - res.gd,
+		color_map_offset(res.entry_fp_hi - res.gd,
 			res.grlt_1,
 			res.grlt_0)
 	);
@@ -333,7 +305,7 @@ void func2(const table_slices_t& tables, const int8_t gd_val, const int left_sid
 	// right part of the globe
 	set_pixel_color(
 		&framebuffer[right_side_globe_pixel_ofs],
-		some_offset(res.entry_fp_hi + res.gd - res.grlt_1,
+		color_map_offset(res.entry_fp_hi + res.gd - res.grlt_1,
 			res.grlt_1,
 			res.grlt_0)
 	);
@@ -347,7 +319,7 @@ std::vector<std::vector<uint8_t>> parse_unk0(const std::array<uint8_t, 3290>& un
 	struct unk0_t
 	{
 		int8_t first; // -65
-		std::array<int8_t, 2868> values; // n lines of values ending with negative value (and a final -1 value)
+		std::array<int8_t, 2868> values; // n lines of (non negative)values ending with negative value (and a final -1 value)
 			//v v v v v v [<0]
 			//v v v v v v v v v v v v [<0]
 			//v v v v v v v v v v v v v [<0]
@@ -382,6 +354,7 @@ std::vector<std::vector<uint8_t>> parse_unk0(const std::array<uint8_t, 3290>& un
 
 		do
 		{
+			assert_throw(val >= 0);
 			values.push_back(val);
 			val = unk0[di++];
 		} while (val >= 0);
@@ -399,7 +372,7 @@ std::vector<std::vector<uint8_t>> parse_unk0(const std::array<uint8_t, 3290>& un
 	return lines;
 }
 
-std::vector<std::vector<uint8_t>> GLOBLE_LINES;
+std::vector<std::vector<uint8_t>> GLOBE_LINES;
 
 struct point_t
 {
@@ -407,30 +380,38 @@ struct point_t
 	int y{};
 };
 
+enum class hemisphere_t
+{
+	NORTH,
+	SOUTH
+};
+
 void draw_hemisphere(
-	bool drawing_norther_hemisphere,
+	hemisphere_t hemisphere,
 	const std::vector<std::vector<uint8_t>>& globe_lines,
 	const std::array<table_slices_t, 64>& all_slices
 	)
 {
-	const int start_line = drawing_norther_hemisphere ? 0 : 1;
-	const auto start_point = drawing_norther_hemisphere ? point_t{ 160, 79 } : point_t{ 160, 80 };
-	const int framebuffer_line_inc = drawing_norther_hemisphere ? -FRAMEBUFFER_WIDTH : FRAMEBUFFER_WIDTH;
+	const bool is_north = hemisphere == hemisphere_t::NORTH;
+
+	const int start_line = is_north ? 0 : 1;
+	const auto start_point = is_north ? point_t{ 160, 80-1 } : point_t{ 160, 80+0 };
+	const int framebuffer_line_inc = is_north ? -FRAMEBUFFER_WIDTH : FRAMEBUFFER_WIDTH;
 
 	const int GLOBE_CENTER_OFS = frame_buffer_offset(start_point.x, start_point.y);
 	int right_side_globe_pixel_ofs = GLOBE_CENTER_OFS;
 	int framebuffer_line_start = GLOBE_CENTER_OFS;
 	int left_side_globe_pixel_ofs = GLOBE_CENTER_OFS - 1;
 
-	for (int gl = start_line; gl < GLOBLE_LINES.size(); ++gl)
+	for (int gl = start_line; gl < globe_lines.size(); ++gl)
 	{
-		const auto& line = GLOBLE_LINES[gl];
+		const auto& line = globe_lines[gl];
 		for (int index = 0; index < line.size(); ++index)
 		{
-			int8_t gd_val = line[index];
+			const int8_t gd_val = line[index];
 			func2(
 				all_slices[index],
-				drawing_norther_hemisphere ? gd_val : -gd_val,
+				is_north ? gd_val : -gd_val,
 				left_side_globe_pixel_ofs--, right_side_globe_pixel_ofs++);
 		}
 
@@ -443,8 +424,8 @@ void draw_hemisphere(
 void draw_globe(uint8_t* framebuffer) {
 	const GLOBDATA_BIN_t* globdata2 = reinterpret_cast<const GLOBDATA_BIN_t*>(GLOBDATA_BIN);
 
-	draw_hemisphere(true, GLOBLE_LINES, globdata2->all_slices);
-	draw_hemisphere(false, GLOBLE_LINES, globdata2->all_slices);
+	draw_hemisphere(hemisphere_t::NORTH, GLOBE_LINES, globdata2->all_slices);
+	draw_hemisphere(hemisphere_t::SOUTH, GLOBE_LINES, globdata2->all_slices);
 }
 
 void init_globe_rotation_lookup_table() {
@@ -459,8 +440,8 @@ void init_globe_rotation_lookup_table() {
 #define ALWAYS_INIT() (true)
 
 struct draw_params_t {
-	int16_t  tilt;
-	uint16_t rotation;
+	int16_t  tilt{};
+	uint16_t rotation{};
 };
 
 struct rgb_t
@@ -495,9 +476,9 @@ void draw_frame(void *draw_params) {
 	if (SDL_MUSTLOCK(screen)) SDL_LockSurface(screen);
 #endif
 
-	auto* dp = reinterpret_cast<draw_params_t*>(draw_params);
-	int16_t  tilt     = dp->tilt;
-	uint16_t rotation = dp->rotation;
+	auto& dp = *reinterpret_cast<draw_params_t*>(draw_params);
+	const int16_t  tilt     = dp.tilt;
+	const uint16_t rotation = dp.rotation;
 
 #if ALWAYS_INIT()
 	init_globe_rotation_lookup_table();
@@ -565,7 +546,7 @@ struct animated_t {
 
 	pos_t next() {
 		float f = sinf(frame / 200.0f);
-		int16_t tilt = -MAX_TILT * f;
+		int16_t tilt = static_cast<int16_t>(-MAX_TILT * f);
 		int16_t rotation = 150 * frame;
 
 		frame++;
@@ -612,7 +593,7 @@ int main() {
 	SDL_Init(SDL_INIT_VIDEO);
 
 	const GLOBDATA_BIN_t* globdata2 = reinterpret_cast<const GLOBDATA_BIN_t*>(GLOBDATA_BIN);
-	GLOBLE_LINES = parse_unk0(globdata2->unk0);
+	GLOBE_LINES = parse_unk0(globdata2->unk0);
 
 #if !ALWAYS_INIT()
 	init_globe_rotation_lookup_table();
