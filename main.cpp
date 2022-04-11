@@ -396,60 +396,41 @@ struct point_t
 	int y{};
 };
 
-void draw_globe(uint8_t *framebuffer) {
+void draw_hemisphere(
+	const std::vector<std::vector<uint8_t>>& globe_lines, int start_line, const point_t& start_point,
+	const std::array<table_slices_t, 64>& all_slices,
+	bool drawing_southern_hemisphere,
+	int framebuffer_width_dir
+	)
+{
+	const int GLOBE_CENTER_OFS = frame_buffer_offset(start_point.x, start_point.y);
+	int right_side_globe_pixel_ofs = GLOBE_CENTER_OFS;
+	int framebuffer_line_start = GLOBE_CENTER_OFS;
+	int left_side_globe_pixel_ofs = GLOBE_CENTER_OFS - 1;
+
+	for (int gl = start_line; gl < GLOBLE_LINES.size(); ++gl)
+	{
+		const auto& line = GLOBLE_LINES[gl];
+		for (int index = 0; index < line.size(); ++index)
+		{
+			int8_t gd_val = line[index];
+			func2(
+				all_slices[index],
+				drawing_southern_hemisphere ? -gd_val : gd_val,
+				left_side_globe_pixel_ofs--, right_side_globe_pixel_ofs++);
+		}
+
+		framebuffer_line_start += ( drawing_southern_hemisphere ? +1 : -1 ) * FRAMEBUFFER_WIDTH;
+		right_side_globe_pixel_ofs = framebuffer_line_start;
+		left_side_globe_pixel_ofs = framebuffer_line_start - 1;
+	}
+};
+
+void draw_globe(uint8_t* framebuffer) {
 	const GLOBDATA_BIN_t* globdata2 = reinterpret_cast<const GLOBDATA_BIN_t*>(GLOBDATA_BIN);
 
-	for (int i = 0; i < 2; ++i) // northern + southern hemisphere
-	{
-		point_t start_point;
-		bool drawing_southern_hemisphere = false;
-		int framebuffer_width_dir = -1;
-
-		if (i == 0)
-		{
-			start_point = { 160, 79 };
-			drawing_southern_hemisphere = false;
-			framebuffer_width_dir = -1;
-		}
-		else
-		{
-			start_point = { 160, 80 };
-			drawing_southern_hemisphere = true;
-			framebuffer_width_dir = +1;
-		}
-
-		auto draw_hemisphere = [](
-			const std::vector<std::vector<uint8_t>>& globe_lines, int start_line, const point_t& start_point,
-			const std::array<table_slices_t, 64>& all_slices,
-			bool drawing_southern_hemisphere,
-			int framebuffer_width_dir
-		)
-		{
-			const int GLOBE_CENTER_OFS = frame_buffer_offset(start_point.x, start_point.y);
-			int right_side_globe_pixel_ofs = GLOBE_CENTER_OFS;
-			int framebuffer_line_start = GLOBE_CENTER_OFS;
-			int left_side_globe_pixel_ofs = GLOBE_CENTER_OFS - 1;
-
-			for (int gl = start_line; gl < GLOBLE_LINES.size(); ++gl)
-			{
-				const auto& line = GLOBLE_LINES[gl];
-				for (int index = 0; index < line.size(); ++index)
-				{
-					int8_t gd_val = line[index];
-					func2(
-						all_slices[index],
-						drawing_southern_hemisphere ? -gd_val : gd_val,
-						left_side_globe_pixel_ofs--, right_side_globe_pixel_ofs++);
-				}
-
-				framebuffer_line_start += framebuffer_width_dir * FRAMEBUFFER_WIDTH;
-				right_side_globe_pixel_ofs = framebuffer_line_start;
-				left_side_globe_pixel_ofs = framebuffer_line_start - 1;
-			}
-		};
-
-		draw_hemisphere(GLOBLE_LINES, i, start_point, globdata2->all_slices, drawing_southern_hemisphere, framebuffer_width_dir);
-	}
+	draw_hemisphere(GLOBLE_LINES, 0, { 160, 79 }, globdata2->all_slices, false, -1);
+	draw_hemisphere(GLOBLE_LINES, 1, { 160, 80 }, globdata2->all_slices, true, +1);
 }
 
 void init_globe_rotation_lookup_table() {
