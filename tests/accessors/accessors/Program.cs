@@ -10,133 +10,97 @@ namespace accessors
 	{
 		static void Main(string[] args)
 		{
+			color_map(globedata.data, 3290, 200, 64*200, "tables.html");
+			color_map(globedata.data, 0, 63, 3290, "header.html");
+			color_map(globedata.data, 0, 128, globedata.data.Length, "all.html");
+			color_map(mapbin.data, 0, 400, mapbin.data.Length-400, "map_bin.html");
+			accessor_map();
+		}
+
+		private static void color_map(byte[] data, int file_start, int xwidth, int length, string filename)
+		{
+
+			// better, ai based rainbow color-map
+			// https://ai.googleblog.com/2019/08/turbo-improved-rainbow-colormap-for.html
+			// https://gist.github.com/mikhailov-work/6a308c20e494d9e0ccc29036b28faa7a
+			// https://gist.github.com/mikhailov-work/ee72ba4191942acecc03fe6da94fc73f
+
+			var color_bitmap = new Bitmap(@"F:\projects\fun\dos_games_rev\dune_scummvm_cryo_stuff\wasm-emscripten-dune-globe\tests\google_ai_turbo_rainbow_colors.png");
+
 			{
-				// better, ai based rainbow color-map
-				// https://ai.googleblog.com/2019/08/turbo-improved-rainbow-colormap-for.html
-				// https://gist.github.com/mikhailov-work/6a308c20e494d9e0ccc29036b28faa7a
-				// https://gist.github.com/mikhailov-work/ee72ba4191942acecc03fe6da94fc73f
-				// https://gist.github.com/mikhailov-work/ee72ba4191942acecc03fe6da94fc73f
-
-				var color_bitmap = new Bitmap(@"F:\projects\fun\dos_games_rev\dune_scummvm_cryo_stuff\wasm-emscripten-dune-globe\tests\google_ai_turbo_rainbow_colors.png");
-
-				//--------
-
-				//for (int x = 0; x < color_bitmap.Width; x++)
-				//	for (int y = 0; y < color_bitmap.Height; y++)
-				//	{
-				//		Color pixelColor = color_bitmap.GetPixel(x, y);
-
-				//		System.Drawing.ColorTranslator.ToHtml(pixelColor);
-
-				//		// things we do with pixelColor
-				//	}
-
-				//-------
-
-				using StreamWriter colormap = new(@"F:\projects\fun\dos_games_rev\dune_scummvm_cryo_stuff\wasm-emscripten-dune-globe\tests\colormap.html");
-
-				string table_style = "<style type=\"text/css\">td{font-family: Arial; font-size: 14px; height: 14px; width: 14px; border:none}</style>";
-
+				using StreamWriter colormap = new(@"F:\projects\fun\dos_games_rev\dune_scummvm_cryo_stuff\wasm-emscripten-dune-globe\tests\" + filename);
+				string table_style = "<style type=\"text/css\">td{font-family: Arial; font-size: 14px; height: 8px; width: 8px; border:none}</style>";
 				colormap.WriteLine(table_style);
 
-				//-----------
+				colormap.WriteLine("<table cellspacing=\"0\">");
 
-				//colormap.WriteLine("<table>");
+				int xfull_lines = length / xwidth;
+				int xrest = length % xwidth;
 
-				//colormap.WriteLine("  <tr>");
-				//for (int i = 0; i < 256; ++i)
-				//{
-				//	Color pixelColor = color_bitmap.GetPixel(i*2, 0);
-				//	string html_color = System.Drawing.ColorTranslator.ToHtml(pixelColor);
-
-				//	colormap.WriteLine("    <td bgcolor=\"{0}\"></td>", html_color);
-				//}
-				//colormap.WriteLine("  </tr>");
-
-				//colormap.WriteLine("</table>");
-
-				//---------------
-
+				int xlines = xfull_lines;
+				if (xrest != 0)
 				{
-					colormap.WriteLine("<table cellspacing=\"0\">");
+					++xlines;
+				}
 
+				for (int i = 0; i < xlines; ++i)
+				{
+					int start = i * xwidth;
 
-#if true
-					// cos/sin tables?
-#if true
-					int xwidth = 200;
-					int file_start = 3290;
-					int length = 64 * 200;
-#else
-					int xwidth = 63;
-					int file_start = 0;
-					int length = 3290;
-#endif
-#else
-					int file_start = 0;
-					int length = globedata.data.Length;
-#endif
-					int xfull_lines = length / xwidth;
-					int xrest = length % xwidth;
+					colormap.WriteLine("  <tr>");
 
-					int xlines = xfull_lines;
-					if (xrest != 0)
+					for (int p = 0; p < xwidth; ++p)
 					{
-						++xlines;
-					}
+						int curr = start + p;
 
-					for (int i = 0; i < xlines; ++i)
-					{
-						int start = i * xwidth;
-
-						colormap.WriteLine("  <tr>");
-
-						for (int p = 0; p < xwidth; ++p)
+						if (curr < length)
 						{
-							int curr = start + p;
+							//Debug.Assert((curr >= file_start) && (curr <= file_start + length));
 
-							if (curr < length)
+							byte byte_value = data[file_start + curr];
+							sbyte sbyte_value = (sbyte)byte_value;
+
+
+							string html_color;
+							if (byte_value == 0)
 							{
-								//Debug.Assert((curr >= file_start) && (curr <= file_start + length));
-
-								var byte_value = globedata.data[file_start+curr];
-
-								string html_color;
-								if (byte_value == 0)
-								{
-									html_color = "grey";
-								}
-								else if(byte_value == 255)
-								{
-									html_color = "white";
-								}
-								else
-								{ 
-									Color pixelColor = color_bitmap.GetPixel(byte_value * 2, 0);
-									html_color = System.Drawing.ColorTranslator.ToHtml(pixelColor);
-								}
-
-								colormap.WriteLine("   <td bgcolor=\"{0}\" title=\"{1}:{2}\"></td>", html_color, curr.ToString("X4"), byte_value.ToString("X2"));
+								html_color = "grey";
+							}
+							else if (byte_value == 255)
+							{
+								html_color = "white";
 							}
 							else
 							{
-								colormap.WriteLine("   <td style=\"text-align:center\">-</td>");
+								Color pixelColor = color_bitmap.GetPixel(byte_value * 2, 0);
+								html_color = System.Drawing.ColorTranslator.ToHtml(pixelColor);
 							}
-						}
 
-						colormap.WriteLine("  </tr>");
+							colormap.WriteLine("   <td bgcolor=\"{0}\" title=\"offset: 0x{1}({2})\nvalue:0x{3}(unsigned: {4}, signed: {5})\"></td>", html_color,
+								curr.ToString("X4"), curr.ToString(),
+								byte_value.ToString("X2"), byte_value, sbyte_value);
+						}
+						else
+						{
+							colormap.WriteLine("   <td style=\"text-align:center\">-</td>");
+						}
 					}
 
-					colormap.WriteLine("</table>");
+					colormap.WriteLine("  </tr>");
 				}
-			}
 
+				colormap.WriteLine("</table>");
+			}
+		}
+
+		private static void accessor_map()
+		{
 			string filename = @"F:\projects\fun\dos_games_rev\dune_scummvm_cryo_stuff\wasm-emscripten-dune-globe\tests\accessors.txt";
 
 			var file = File.ReadAllLines(filename);
 
 			var offsets = new List<string> { };
-			var color_dict = new Dictionary<string,int> { };
+			var color_dict = new Dictionary<string, int> { };
 
 			foreach (var line in file)
 			{
@@ -166,7 +130,7 @@ namespace accessors
 			Debug.Assert(color_dict.ContainsKey("3"));
 			Debug.Assert(color_dict.ContainsKey("4"));
 
-			var color_html = new Dictionary<string, string> 
+			var color_html = new Dictionary<string, string>
 			{
 				{ "unused","black" },
 				{ "1,5","green" },
@@ -177,15 +141,14 @@ namespace accessors
 				{ "3","teal" },
 				{ "4","aqua" }
 			};
-
-			using StreamWriter html = new(@"F:\projects\fun\dos_games_rev\dune_scummvm_cryo_stuff\wasm-emscripten-dune-globe\tests\accessors.html");
+			StreamWriter html = new(@"F:\projects\fun\dos_games_rev\dune_scummvm_cryo_stuff\wasm-emscripten-dune-globe\tests\accessors.html");
 
 			string style = "<style type=\"text/css\">td{font-family: Arial; font-size: 12px; height: 12px; width: 12px}</style>";
 
 			html.WriteLine(style);
 
 			html.WriteLine("<table>");
-			
+
 			html.WriteLine("  <tr>");
 			html.WriteLine("    <td>key</td>");
 			html.WriteLine("    <td>count</th>");
