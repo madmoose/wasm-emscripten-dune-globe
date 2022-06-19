@@ -5,10 +5,16 @@
 #include <string>
 #include <vector>
 
-#include <SDL/SDL.h>
+// globe dimensions: 128 x 109 pixel
+//   128 = (left: 96, right : 96)
+//	 109 = 
+//     top: 55 (northern hemisphere, full globe_lines starting from 0)
+//     bottom: 54 (southern hemisphere, globe_lines starting from 1)
+
+#include <SDL/SDL.h> // vcpkg install sdl1:x86-windows
 #undef main
 
-unsigned resolution_factor = 3; // 1=320x200, 2=640x40, 3=1280x800, ...
+unsigned resolution_factor = 5; // 1=320x200, 2=640x40, 3=1280x800, ...
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -42,8 +48,8 @@ struct rotation_lookup_table_entry_t {
 };
 static_assert(sizeof(rotation_lookup_table_entry_t) == 8, "wrong size");
 
-constexpr int MAX_TILT = 98; // 200/2 - 2?
-using globe_rotation_lookup_table_t = std::array<rotation_lookup_table_entry_t, MAX_TILT+1>; // MAX_TILT related see precalculate_globe_rotation_lookup_table
+constexpr int MAX_TILT = 98;
+using globe_rotation_lookup_table_t = std::array<rotation_lookup_table_entry_t, MAX_TILT+1>;
 globe_rotation_lookup_table_t globe_rotation_lookup_table;
 std::array<uint16_t, MAX_TILT*2> globe_tilt_lookup_table;
 
@@ -72,12 +78,13 @@ int8_t lo(int16_t v) {
  *  Think of it as the fractional part of a 16.16 fixed point number.
  */
 void precalculate_globe_rotation_lookup_table(uint16_t globe_rotation) {
-	constexpr uint32_t MAGIC_VALUE = 398; // (100-1)*4?
+	constexpr uint32_t MAGIC_VALUE = 398; // (200-1)*2?
 
-	uint32_t dxax = MAGIC_VALUE * globe_rotation;
+	uint32_t dxax = globe_rotation * MAGIC_VALUE;
 
 	// Floor the 16.16 fp value
 	dxax &= ~0xffff;
+	// same as dxax &= 0xFFFFFFFFFFFF0000;
 
 	auto& first = globe_rotation_lookup_table[0];
 
@@ -311,7 +318,7 @@ void func2(const table_slices_t& tables, const int8_t gd_val, const int left_sid
 	);
 };
 
-std::vector<std::vector<uint8_t>> parse_unk0(const std::array<uint8_t, 3290>& unk0)
+std::vector<std::vector<uint8_t>> parse_globe_lines(const std::array<uint8_t, 3290>& unk0)
 {
 #if 0
 // layout documentation
@@ -320,6 +327,8 @@ std::vector<std::vector<uint8_t>> parse_unk0(const std::array<uint8_t, 3290>& un
 	{
 		int8_t first; // -65
 		std::array<int8_t, 2868> values; // n lines of (non negative)values ending with negative value (and a final -1 value)
+		// forming a globe contur
+		// v are indices to the globe_tilt_lookup_table
 			//v v v v v v [<0]
 			//v v v v v v v v v v v v [<0]
 			//v v v v v v v v v v v v v [<0]
@@ -485,6 +494,13 @@ void draw_frame(void *draw_params) {
 #endif
 	precalculate_globe_rotation_lookup_table(rotation);
 
+#if 0
+	for (int i = 0; i < globe_rotation_lookup_table.size(); ++i)
+	{
+		printf("[%02i] %u\n", i, globe_rotation_lookup_table[i]);
+	}
+#endif
+
 	precalculate_globe_tilt_lookup_table(tilt);
 
 	draw_globe(framebuffer.data());
@@ -593,7 +609,17 @@ int main() {
 	SDL_Init(SDL_INIT_VIDEO);
 
 	const GLOBDATA_BIN_t* globdata2 = reinterpret_cast<const GLOBDATA_BIN_t*>(GLOBDATA_BIN);
-	GLOBE_LINES = parse_unk0(globdata2->unk0);
+	GLOBE_LINES = parse_globe_lines(globdata2->unk0);
+
+#if 0
+	FILE* fp{};
+	fopen_s(&fp, "d:/temp/globel_lines_size.csv", "w+");
+	for (auto& gl : GLOBE_LINES)
+	{
+		fprintf(fp, "%u\n", gl.size());
+	}
+	fclose(fp);
+#endif
 
 #if !ALWAYS_INIT()
 	init_globe_rotation_lookup_table();
